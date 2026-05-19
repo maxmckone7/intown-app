@@ -296,8 +296,9 @@ export default function FriendsScreen() {
             <View style={styles.emptyState}>
               <Text style={styles.emptyStateText}>No friends yet</Text>
               <Text style={styles.emptyStateSubtext}>
-                Search for users to add them as friends
+                Search for users or invite people to join InTown
               </Text>
+              <InviteFriends variant="compact" />
             </View>
           ) : (
             <FlatList
