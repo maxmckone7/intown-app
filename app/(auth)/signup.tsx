@@ -60,6 +60,11 @@ export default function SignUpScreen() {
     setLoading(true);
     try {
       await authService.signInWithGoogle();
+      if (Platform.OS === 'web') {
+        router.push('/(tabs)');
+      } else {
+        router.replace('/(tabs)');
+      }
     } catch (error: any) {
       showAlert('Sign Up Failed', error.message || 'An error occurred');
       setLoading(false);
@@ -70,6 +75,11 @@ export default function SignUpScreen() {
     setLoading(true);
     try {
       await authService.signInWithApple();
+      if (Platform.OS === 'web') {
+        router.push('/(tabs)');
+      } else {
+        router.replace('/(tabs)');
+      }
     } catch (error: any) {
       showAlert('Sign Up Failed', error.message || 'An error occurred');
       setLoading(false);

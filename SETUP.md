@@ -73,8 +73,19 @@ This will create:
 2. Find "Google" and click to enable it
 3. You'll need to:
    - Create a Google OAuth app at [Google Cloud Console](https://console.cloud.google.com)
-   - Add your Supabase redirect URL to Google OAuth settings
+   - Add your Supabase callback URL to Google OAuth settings:
+     ```
+     https://<your-project-ref>.supabase.co/auth/v1/callback
+     ```
    - Copy Client ID and Client Secret to Supabase
+4. Go to **Authentication** → **URL Configuration** in Supabase
+5. Add these redirect URLs:
+   ```
+   intown:///auth/callback
+   http://localhost:8081/auth/callback
+   https://your-production-domain.com/auth/callback
+   ```
+   If Expo starts web on another localhost port, add that exact origin with `/auth/callback`.
 
 ### For Apple Login:
 
