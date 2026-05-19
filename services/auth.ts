@@ -1,12 +1,95 @@
 import { supabase } from '../lib/supabase';
+import * as AuthSession from 'expo-auth-session';
+import * as WebBrowser from 'expo-web-browser';
 import { Session, User as SupabaseUser } from '@supabase/supabase-js';
+
+WebBrowser.maybeCompleteAuthSession();
 
 export interface AuthUser extends SupabaseUser {
   user_metadata?: {
     name?: string;
+    full_name?: string;
     avatar_url?: string;
+    picture?: string;
   };
 }
+
+const OAUTH_REDIRECT_PATH = 'auth/callback';
+
+const getOAuthRedirectUrl = () =>
+  AuthSession.makeRedirectUri({
+    scheme: 'intown',
+    path: OAUTH_REDIRECT_PATH,
+    isTripleSlashed: true,
+  });
+
+const getOAuthProfile = (user: SupabaseUser) => {
+  const metadata = user.user_metadata || {};
+
+  return {
+    id: user.id,
+    email: user.email!,
+    name: metadata.name || metadata.full_name || user.email,
+    avatar_url: metadata.avatar_url || metadata.picture || null,
+  };
+};
+
+const ensureUserProfile = async (user: SupabaseUser | null) => {
+  if (!user?.email) {
+    return;
+  }
+
+  const { error } = await supabase
+    .from('users')
+    .upsert(getOAuthProfile(user), { onConflict: 'id' });
+
+  if (error) {
+    console.error('User profile upsert error:', error);
+    throw error;
+  }
+};
+
+const completeOAuthSignIn = async (provider: 'google' | 'apple') => {
+  const redirectTo = getOAuthRedirectUrl();
+  const { data, error } = await supabase.auth.signInWithOAuth({
+    provider,
+    options: {
+      redirectTo,
+      skipBrowserRedirect: true,
+      queryParams: provider === 'google' ? { prompt: 'select_account' } : undefined,
+    },
+  });
+
+  if (error) throw error;
+  if (!data?.url) {
+    throw new Error(`${provider} sign-in did not return an OAuth URL.`);
+  }
+
+  const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
+
+  if (result.type !== 'success') {
+    throw new Error(`${provider} sign-in was cancelled.`);
+  }
+
+  const params = new URL(result.url).searchParams;
+  const oauthError = params.get('error_description') || params.get('error');
+  if (oauthError) {
+    throw new Error(oauthError);
+  }
+
+  const code = params.get('code');
+  if (!code) {
+    throw new Error(`${provider} sign-in did not return an authorization code.`);
+  }
+
+  const { data: sessionData, error: sessionError } =
+    await supabase.auth.exchangeCodeForSession(code);
+
+  if (sessionError) throw sessionError;
+  await ensureUserProfile(sessionData.user);
+
+  return sessionData;
+};
 
 export const authService = {
   async signUp(email: string, password: string, name: string) {
@@ -22,13 +105,14 @@ export const authService = {
 
     if (error) throw error;
 
-    // Create user profile
-    if (data.user) {
-      await supabase.from('users').insert({
-        id: data.user.id,
-        email: data.user.email!,
-        name,
-      });
+    if (data.session && data.user) {
+      await ensureUserProfile({
+        ...data.user,
+        user_metadata: {
+          ...data.user?.user_metadata,
+          name,
+        },
+      } as SupabaseUser);
     }
 
     return data;
@@ -66,27 +150,11 @@ export const authService = {
   },
 
   async signInWithGoogle() {
-    const { data, error } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: {
-        redirectTo: 'social-calendar://auth/callback',
-      },
-    });
-
-    if (error) throw error;
-    return data;
+    return completeOAuthSignIn('google');
   },
 
   async signInWithApple() {
-    const { data, error } = await supabase.auth.signInWithOAuth({
-      provider: 'apple',
-      options: {
-        redirectTo: 'social-calendar://auth/callback',
-      },
-    });
-
-    if (error) throw error;
-    return data;
+    return completeOAuthSignIn('apple');
   },
 };
 

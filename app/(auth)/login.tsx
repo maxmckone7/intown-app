@@ -57,9 +57,14 @@ export default function LoginScreen() {
     setLoading(true);
     try {
       await authService.signInWithGoogle();
+      if (Platform.OS === 'web') {
+        router.push('/(tabs)');
+      } else {
+        router.replace('/(tabs)');
+      }
     } catch (error: any) {
       console.error('Google login error:', error);
-      showAlert('Login Failed', error.message || 'OAuth not supported in mock mode. Use email/password.');
+      showAlert('Login Failed', error.message || 'Unable to continue with Google.');
       setLoading(false);
     }
   };
@@ -68,9 +73,14 @@ export default function LoginScreen() {
     setLoading(true);
     try {
       await authService.signInWithApple();
+      if (Platform.OS === 'web') {
+        router.push('/(tabs)');
+      } else {
+        router.replace('/(tabs)');
+      }
     } catch (error: any) {
       console.error('Apple login error:', error);
-      showAlert('Login Failed', error.message || 'OAuth not supported in mock mode. Use email/password.');
+      showAlert('Login Failed', error.message || 'Unable to continue with Apple.');
       setLoading(false);
     }
   };
