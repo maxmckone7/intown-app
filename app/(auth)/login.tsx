@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
+  Animated,
   View,
   Text,
   TextInput,
@@ -9,6 +10,7 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
+  Easing,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { authService } from '../../services/auth';
@@ -26,7 +28,80 @@ export default function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const floatAnim = useRef(new Animated.Value(0)).current;
+  const glowAnim = useRef(new Animated.Value(0)).current;
   const router = useRouter();
+
+  useEffect(() => {
+    const animation = Animated.loop(
+      Animated.parallel([
+        Animated.sequence([
+          Animated.timing(floatAnim, {
+            toValue: 1,
+            duration: 3400,
+            easing: Easing.inOut(Easing.sin),
+            useNativeDriver: true,
+          }),
+          Animated.timing(floatAnim, {
+            toValue: 0,
+            duration: 3400,
+            easing: Easing.inOut(Easing.sin),
+            useNativeDriver: true,
+          }),
+        ]),
+        Animated.sequence([
+          Animated.timing(glowAnim, {
+            toValue: 1,
+            duration: 2600,
+            easing: Easing.inOut(Easing.ease),
+            useNativeDriver: true,
+          }),
+          Animated.timing(glowAnim, {
+            toValue: 0,
+            duration: 2600,
+            easing: Easing.inOut(Easing.ease),
+            useNativeDriver: true,
+          }),
+        ]),
+      ])
+    );
+
+    animation.start();
+
+    return () => animation.stop();
+  }, [floatAnim, glowAnim]);
+
+  const floatingStyle = {
+    transform: [
+      {
+        translateY: floatAnim.interpolate({
+          inputRange: [0, 1],
+          outputRange: [-12, 12],
+        }),
+      },
+      {
+        rotate: floatAnim.interpolate({
+          inputRange: [0, 1],
+          outputRange: ['-6deg', '6deg'],
+        }),
+      },
+    ],
+  };
+
+  const glowStyle = {
+    opacity: glowAnim.interpolate({
+      inputRange: [0, 1],
+      outputRange: [0.35, 0.75],
+    }),
+    transform: [
+      {
+        scale: glowAnim.interpolate({
+          inputRange: [0, 1],
+          outputRange: [0.96, 1.08],
+        }),
+      },
+    ],
+  };
 
   const handleLogin = async () => {
     if (!email || !password) {
@@ -80,14 +155,35 @@ export default function LoginScreen() {
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
-      <View style={styles.content}>
-        <Text style={styles.title}>InTown</Text>
-        <Text style={styles.subtitle}>Sign in to continue</Text>
+      <View style={styles.backgroundScene}>
+        <View style={styles.sunburstOne} />
+        <View style={styles.sunburstTwo} />
+        <Animated.View style={[styles.floatingOrb, styles.orbPink, floatingStyle]} />
+        <Animated.View style={[styles.floatingOrb, styles.orbBlue, glowStyle]} />
+        <Animated.View style={[styles.floatingOrb, styles.orbGold, floatingStyle, glowStyle]} />
+        <View style={styles.rainbowRibbon}>
+          {['#ff3d7f', '#ff8a00', '#ffd400', '#32d74b', '#00c2ff', '#7a5cff'].map((color) => (
+            <View key={color} style={[styles.ribbonStripe, { backgroundColor: color }]} />
+          ))}
+        </View>
+      </View>
 
-        <View style={styles.form}>
+      <View style={styles.content}>
+        <Animated.View style={[styles.heroBadge, glowStyle]}>
+          <Text style={styles.heroBadgeText}>Meet your city in color</Text>
+        </Animated.View>
+
+        <View style={styles.formCard}>
+          <View style={styles.logoBurst}>
+            <Text style={styles.logoText}>InTown</Text>
+          </View>
+          <Text style={styles.title}>Welcome back</Text>
+          <Text style={styles.subtitle}>Sign in and find the brightest plans nearby.</Text>
+
           <TextInput
             style={styles.input}
             placeholder="Email"
+            placeholderTextColor="#9278a8"
             value={email}
             onChangeText={setEmail}
             keyboardType="email-address"
@@ -98,6 +194,7 @@ export default function LoginScreen() {
           <TextInput
             style={styles.input}
             placeholder="Password"
+            placeholderTextColor="#9278a8"
             value={password}
             onChangeText={setPassword}
             secureTextEntry
@@ -111,8 +208,13 @@ export default function LoginScreen() {
             disabled={loading}
             activeOpacity={0.7}
           >
+            <View style={styles.buttonRainbow} pointerEvents="none">
+              {['#ff2d55', '#ff9500', '#ffd60a', '#34c759', '#00a8ff', '#8e5cff'].map((color) => (
+                <View key={color} style={[styles.buttonStripe, { backgroundColor: color }]} />
+              ))}
+            </View>
             {loading ? (
-              <ActivityIndicator color="#fff" />
+              <ActivityIndicator color="#fff" style={styles.buttonContent} />
             ) : (
               <Text style={styles.buttonText}>Sign In</Text>
             )}
@@ -129,7 +231,7 @@ export default function LoginScreen() {
             onPress={handleGoogleLogin}
             disabled={loading}
           >
-            <Text style={styles.socialButtonText}>Continue with Google</Text>
+            <Text style={styles.googleButtonText}>Continue with Google</Text>
           </TouchableOpacity>
 
           {Platform.OS === 'ios' && (
@@ -138,7 +240,7 @@ export default function LoginScreen() {
               onPress={handleAppleLogin}
               disabled={loading}
             >
-              <Text style={styles.socialButtonText}>Continue with Apple</Text>
+              <Text style={styles.appleButtonText}>Continue with Apple</Text>
             </TouchableOpacity>
           )}
 
@@ -159,52 +261,188 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: '#fff4fb',
+    overflow: 'hidden',
+  },
+  backgroundScene: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: '#fff4fb',
+  },
+  sunburstOne: {
+    position: 'absolute',
+    top: -150,
+    left: -90,
+    width: 320,
+    height: 320,
+    borderRadius: 160,
+    backgroundColor: '#ffec8b',
+    opacity: 0.85,
+  },
+  sunburstTwo: {
+    position: 'absolute',
+    right: -120,
+    bottom: -130,
+    width: 340,
+    height: 340,
+    borderRadius: 170,
+    backgroundColor: '#95f1ff',
+    opacity: 0.75,
+  },
+  floatingOrb: {
+    position: 'absolute',
+    borderRadius: 999,
+  },
+  orbPink: {
+    top: 96,
+    right: 34,
+    width: 96,
+    height: 96,
+    backgroundColor: '#ff6fb5',
+    opacity: 0.55,
+  },
+  orbBlue: {
+    bottom: 124,
+    left: 24,
+    width: 118,
+    height: 118,
+    backgroundColor: '#6d7dff',
+  },
+  orbGold: {
+    top: 220,
+    left: -26,
+    width: 74,
+    height: 74,
+    backgroundColor: '#ffb000',
+  },
+  rainbowRibbon: {
+    position: 'absolute',
+    top: 54,
+    left: -36,
+    right: -36,
+    height: 22,
+    borderRadius: 22,
+    flexDirection: 'row',
+    overflow: 'hidden',
+    transform: [{ rotate: '-8deg' }],
+    opacity: 0.92,
+  },
+  ribbonStripe: {
+    flex: 1,
   },
   content: {
     flex: 1,
     justifyContent: 'center',
-    padding: 20,
+    padding: 22,
+  },
+  heroBadge: {
+    alignSelf: 'center',
+    paddingHorizontal: 18,
+    paddingVertical: 9,
+    borderRadius: 999,
+    backgroundColor: '#ffffffcc',
+    borderWidth: 1,
+    borderColor: '#ffffff',
+    marginBottom: 18,
+    shadowColor: '#ff3d7f',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.18,
+    shadowRadius: 16,
+    elevation: 4,
+  },
+  heroBadgeText: {
+    color: '#7d22d8',
+    fontSize: 14,
+    fontWeight: '800',
+    letterSpacing: 0.4,
+    textTransform: 'uppercase',
+  },
+  formCard: {
+    width: '100%',
+    maxWidth: 440,
+    alignSelf: 'center',
+    borderRadius: 32,
+    padding: 24,
+    backgroundColor: '#ffffffee',
+    borderWidth: 1,
+    borderColor: '#fff',
+    shadowColor: '#7a5cff',
+    shadowOffset: { width: 0, height: 20 },
+    shadowOpacity: 0.2,
+    shadowRadius: 30,
+    elevation: 8,
+  },
+  logoBurst: {
+    alignSelf: 'center',
+    paddingHorizontal: 24,
+    paddingVertical: 10,
+    borderRadius: 22,
+    marginBottom: 18,
+    backgroundColor: '#fff0a8',
+    borderWidth: 2,
+    borderColor: '#ff8a00',
+    transform: [{ rotate: '-2deg' }],
+  },
+  logoText: {
+    fontSize: 30,
+    fontWeight: '900',
+    color: '#ff2d55',
+    letterSpacing: 0.5,
   },
   title: {
-    fontSize: 32,
-    fontWeight: 'bold',
+    fontSize: 34,
+    fontWeight: '900',
     textAlign: 'center',
     marginBottom: 8,
-    color: '#333',
+    color: '#2f1555',
   },
   subtitle: {
     fontSize: 16,
     textAlign: 'center',
-    marginBottom: 40,
-    color: '#666',
-  },
-  form: {
-    width: '100%',
+    lineHeight: 23,
+    marginBottom: 28,
+    color: '#6e4c84',
   },
   input: {
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
+    borderWidth: 2,
+    borderColor: '#f3d8ff',
+    borderRadius: 18,
     padding: 16,
     fontSize: 16,
     marginBottom: 16,
-    backgroundColor: '#f9f9f9',
+    color: '#2f1555',
+    backgroundColor: '#fff9ff',
   },
   button: {
-    backgroundColor: '#007AFF',
-    borderRadius: 8,
+    borderRadius: 20,
     padding: 16,
     alignItems: 'center',
     marginTop: 8,
+    overflow: 'hidden',
+    shadowColor: '#ff3d7f',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.28,
+    shadowRadius: 14,
+    elevation: 6,
   },
   buttonDisabled: {
     opacity: 0.6,
   },
+  buttonRainbow: {
+    ...StyleSheet.absoluteFillObject,
+    flexDirection: 'row',
+  },
+  buttonStripe: {
+    flex: 1,
+  },
+  buttonContent: {
+    zIndex: 1,
+  },
   buttonText: {
     color: '#fff',
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '900',
+    letterSpacing: 0.4,
+    zIndex: 1,
   },
   divider: {
     flexDirection: 'row',
@@ -214,44 +452,50 @@ const styles = StyleSheet.create({
   dividerLine: {
     flex: 1,
     height: 1,
-    backgroundColor: '#ddd',
+    backgroundColor: '#ead3f5',
   },
   dividerText: {
     marginHorizontal: 16,
-    color: '#666',
+    color: '#8e63a5',
     fontSize: 14,
+    fontWeight: '800',
   },
   socialButton: {
-    borderRadius: 8,
+    borderRadius: 18,
     padding: 16,
     alignItems: 'center',
     marginBottom: 12,
-    borderWidth: 1,
+    borderWidth: 2,
   },
   googleButton: {
-    borderColor: '#ddd',
+    borderColor: '#ffd0e8',
     backgroundColor: '#fff',
   },
   appleButton: {
-    borderColor: '#000',
-    backgroundColor: '#000',
+    borderColor: '#2f1555',
+    backgroundColor: '#2f1555',
   },
-  socialButtonText: {
+  googleButtonText: {
     fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
+    fontWeight: '800',
+    color: '#58306d',
+  },
+  appleButtonText: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#fff',
   },
   linkButton: {
     marginTop: 24,
     alignItems: 'center',
   },
   linkText: {
-    color: '#666',
+    color: '#6e4c84',
     fontSize: 14,
   },
   linkTextBold: {
-    color: '#007AFF',
-    fontWeight: '600',
+    color: '#ff2d55',
+    fontWeight: '900',
   },
 });
 
