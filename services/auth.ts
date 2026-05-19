@@ -5,14 +5,14 @@ import { Session, User as SupabaseUser } from '@supabase/supabase-js';
 
 WebBrowser.maybeCompleteAuthSession();
 
-export interface AuthUser extends SupabaseUser {
-  user_metadata?: {
+export type AuthUser = SupabaseUser & {
+  user_metadata: SupabaseUser['user_metadata'] & {
     name?: string;
     full_name?: string;
     avatar_url?: string;
     picture?: string;
   };
-}
+};
 
 const OAUTH_REDIRECT_PATH = 'auth/callback';
 
@@ -24,7 +24,7 @@ const getOAuthRedirectUrl = () =>
   });
 
 const getOAuthProfile = (user: SupabaseUser) => {
-  const metadata = user.user_metadata || {};
+  const metadata = user.user_metadata as AuthUser['user_metadata'];
 
   return {
     id: user.id,
