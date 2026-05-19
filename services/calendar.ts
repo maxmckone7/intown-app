@@ -87,7 +87,9 @@ export const calendarService = {
       return [];
     }
 
-    const friendIds = friendships.map((f) => f.friend_id);
+    const friendIds = (friendships as Array<{ friend_id: string }>).map(
+      (friendship) => friendship.friend_id
+    );
 
     let query = supabase
       .from('calendar_entries')

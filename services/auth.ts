@@ -2,7 +2,7 @@ import { supabase } from '../lib/supabase';
 import { Session, User as SupabaseUser } from '@supabase/supabase-js';
 
 export interface AuthUser extends SupabaseUser {
-  user_metadata?: {
+  user_metadata: SupabaseUser['user_metadata'] & {
     name?: string;
     avatar_url?: string;
   };
