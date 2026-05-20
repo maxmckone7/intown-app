@@ -42,21 +42,28 @@ function hashDate(seed: string): number {
 }
 
 /**
- * Mock data generator — produces a stable HeatmapDayData per ISO date.
+ * Mock data generator — produces a stable HeatmapDayData per
+ * (group, ISO date) pair.
+ *
+ * `groupId` folds into the hash so selecting a different group from
+ * the GroupFilter (DES-15) visibly recolors the grid. When omitted,
+ * behaves like the original DES-13 mock for "all friends".
  *
  * TODO: replace with a real Supabase query that aggregates friend
- * availability per day (DES-13 follow-up). The component should keep
- * working unchanged once `friendsInTown`/`totalFriends` come from the
- * server.
+ * availability per day, scoped by selected group. The component
+ * should keep working unchanged once `friendsInTown`/`totalFriends`
+ * come from the server.
  */
 export function getMockDayData(
   isoDate: string,
-  totalFriends: number
+  totalFriends: number,
+  groupId?: string
 ): HeatmapDayData {
   if (totalFriends <= 0) {
     return { date: isoDate, friendsInTown: 0, totalFriends: 0 };
   }
-  const ratio = hashDate(isoDate);
+  const seed = groupId ? `${groupId}|${isoDate}` : isoDate;
+  const ratio = hashDate(seed);
   const friendsInTown = Math.round(ratio * totalFriends);
   return { date: isoDate, friendsInTown, totalFriends };
 }

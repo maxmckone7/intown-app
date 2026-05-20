@@ -32,6 +32,7 @@ import {
   HeatmapDayData,
 } from '../lib/heatmap';
 import Button from './Button';
+import GroupFilter, { DEFAULT_GROUPS } from './GroupFilter';
 
 type Props = {
   totalFriends: number;
@@ -53,6 +54,7 @@ export default function FriendsCalendar({
 }: Props) {
   const today = startOfToday();
   const [viewMonth, setViewMonth] = useState<Date>(startOfMonth(today));
+  const [selectedGroupId, setSelectedGroupId] = useState<string>('all');
 
   const visibleDays = useMemo(() => {
     const gridStart = startOfWeek(startOfMonth(viewMonth), { weekStartsOn: 0 });
@@ -77,9 +79,7 @@ export default function FriendsCalendar({
     <View style={styles.outer}>
       <View style={styles.inner}>
         <View style={styles.topRow}>
-          <View style={styles.filterPlaceholder}>
-            <Text style={styles.filterPlaceholderText}>Filter by group</Text>
-          </View>
+          <View />
           <Pressable
             onPress={goToday}
             style={({ pressed, hovered }: any) => [
@@ -117,6 +117,21 @@ export default function FriendsCalendar({
           </Pressable>
         </View>
 
+        <View style={styles.filterRow}>
+          <GroupFilter
+            groups={DEFAULT_GROUPS}
+            selectedGroupId={selectedGroupId}
+            onSelect={setSelectedGroupId}
+            onManagePress={() => {
+              // DES-19 will replace this placeholder with the real
+              // group management UI.
+              if (typeof window !== 'undefined' && window.alert) {
+                window.alert('Group management coming soon (DES-19).');
+              }
+            }}
+          />
+        </View>
+
         <View style={styles.weekdayRow}>
           {WEEKDAYS.map((day) => (
             <Text key={day} style={styles.weekdayLabel}>
@@ -130,7 +145,13 @@ export default function FriendsCalendar({
             const iso = ISO(date);
             const inMonth = isSameMonth(date, viewMonth);
             const todayCell = isSameDay(date, today);
-            const data = getDayData ? getDayData(iso) : getMockDayData(iso, totalFriends);
+            const data = getDayData
+              ? getDayData(iso)
+              : getMockDayData(
+                  iso,
+                  totalFriends,
+                  selectedGroupId === 'all' ? undefined : selectedGroupId
+                );
             const bg = getHeatmapColor(data.friendsInTown, data.totalFriends);
             const dayNumber = format(date, 'd');
 
@@ -203,20 +224,8 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginBottom: spacing[3],
   },
-  filterPlaceholder: {
-    paddingHorizontal: spacing[3],
-    paddingVertical: spacing[2],
-    borderRadius: radius.full,
-    backgroundColor: colors.background.card,
-    borderWidth: 1,
-    borderColor: colors.border.subtle,
-  },
-  filterPlaceholderText: {
-    fontFamily: fontFamilies.inter.medium,
-    fontSize: typography.label.fontSize,
-    fontWeight: '500',
-    letterSpacing: typography.label.letterSpacing,
-    color: colors.text.tertiary,
+  filterRow: {
+    marginBottom: spacing[4],
   },
   todayPill: {
     paddingHorizontal: spacing[3],
