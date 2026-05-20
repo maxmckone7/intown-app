@@ -64,6 +64,9 @@ CREATE POLICY "Users can view friends' profiles" ON public.users
 CREATE POLICY "Users can update own profile" ON public.users
   FOR UPDATE USING (auth.uid() = id);
 
+CREATE POLICY "Users can create own profile" ON public.users
+  FOR INSERT WITH CHECK (auth.uid() = id);
+
 -- RLS Policies for friendships table
 CREATE POLICY "Users can view own friendships" ON public.friendships
   FOR SELECT USING (user_id = auth.uid() OR friend_id = auth.uid());
@@ -103,12 +106,24 @@ CREATE POLICY "Users can delete own calendar entries" ON public.calendar_entries
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER AS $$
 BEGIN
-  INSERT INTO public.users (id, email, name)
+  INSERT INTO public.users (id, email, name, avatar_url)
   VALUES (
     NEW.id,
     NEW.email,
-    COALESCE(NEW.raw_user_meta_data->>'name', NEW.email)
-  );
+    COALESCE(
+      NEW.raw_user_meta_data->>'name',
+      NEW.raw_user_meta_data->>'full_name',
+      NEW.email
+    ),
+    COALESCE(
+      NEW.raw_user_meta_data->>'avatar_url',
+      NEW.raw_user_meta_data->>'picture'
+    )
+  )
+  ON CONFLICT (id) DO UPDATE SET
+    email = EXCLUDED.email,
+    name = EXCLUDED.name,
+    avatar_url = EXCLUDED.avatar_url;
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;

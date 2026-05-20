@@ -67,7 +67,18 @@ For social login to work:
 **Google:**
 1. Go to Authentication > Providers in Supabase
 2. Enable Google provider
-3. Add your OAuth credentials
+3. Create a Google OAuth client in [Google Cloud Console](https://console.cloud.google.com)
+4. Add your Supabase callback URL to the Google OAuth client:
+   ```
+   https://<your-project-ref>.supabase.co/auth/v1/callback
+   ```
+5. Copy the Google Client ID and Client Secret into the Supabase Google provider
+6. In Supabase Authentication > URL Configuration > Redirect URLs, add:
+   ```
+   intown:///auth/callback
+   http://localhost:8081/auth/callback
+   https://your-production-domain.com/auth/callback
+   ```
 
 **Apple:**
 1. Go to Authentication > Providers in Supabase

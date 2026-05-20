@@ -1,5 +1,16 @@
+import 'react-native-url-polyfill/auto';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Platform } from 'react-native';
+import { createClient } from '@supabase/supabase-js';
+
+const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
+const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+
+const hasSupabaseConfig = Boolean(
+  supabaseUrl &&
+  supabaseAnonKey &&
+  !supabaseUrl.includes('your-project') &&
+  !supabaseAnonKey.includes('your-anon-key')
+);
 
 // Mock Supabase client using AsyncStorage
 class MockSupabaseClient {
@@ -107,7 +118,9 @@ class MockSupabaseClient {
     signInWithOAuth: async ({ provider }: any) => {
       return {
         data: null,
-        error: { message: 'OAuth not supported in mock mode. Use email/password.' },
+        error: {
+          message: `${provider} sign-in requires Supabase environment variables. Add EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY to enable OAuth.`,
+        },
       };
     },
 
@@ -334,6 +347,33 @@ class MockQueryBuilder {
     return { data: newItem, error: null };
   }
 
+  async upsert(values: any, options?: { onConflict?: string }) {
+    const data = await this.client.getTableData(this.table);
+    const conflictField = options?.onConflict || 'id';
+    const index = data.findIndex((item: any) => item[conflictField] === values[conflictField]);
+    const now = new Date().toISOString();
+
+    if (index === -1) {
+      const newItem = {
+        ...values,
+        id: values.id || `${this.table}_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`,
+        created_at: values.created_at || now,
+        updated_at: values.updated_at || now,
+      };
+      data.push(newItem);
+      await this.client.setTableData(this.table, data);
+      return { data: newItem, error: null };
+    }
+
+    data[index] = {
+      ...data[index],
+      ...values,
+      updated_at: now,
+    };
+    await this.client.setTableData(this.table, data);
+    return { data: data[index], error: null };
+  }
+
   async update(values: any) {
     const data = await this.client.getTableData(this.table);
     const filter = this.filters.find((f) => f.type === 'eq');
@@ -374,27 +414,39 @@ class MockQueryBuilder {
   }
 }
 
-// Export mock client with error handling
+// Export Supabase client with mock fallback for local development without env vars.
 let supabaseInstance: any;
-try {
-  supabaseInstance = new MockSupabaseClient();
-} catch (error) {
-  console.error('Failed to create Supabase mock client:', error);
-  // Create a minimal fallback
-  supabaseInstance = {
+
+if (hasSupabaseConfig) {
+  supabaseInstance = createClient(supabaseUrl!, supabaseAnonKey!, {
     auth: {
-      getSession: async () => ({ data: { session: null }, error: null }),
-      signUp: async () => ({ data: null, error: { message: 'Not initialized' } }),
-      signInWithPassword: async () => ({ data: null, error: { message: 'Not initialized' } }),
-      signOut: async () => ({ error: null }),
-      getUser: async () => ({ data: { user: null }, error: null }),
-      signInWithOAuth: async () => ({ data: null, error: { message: 'Not initialized' } }),
-      onAuthStateChange: () => ({ data: { subscription: { unsubscribe: () => {} } } }),
+      storage: AsyncStorage,
+      autoRefreshToken: true,
+      persistSession: true,
+      detectSessionInUrl: false,
     },
-    from: () => ({
-      select: () => ({ then: (resolve: any) => resolve({ data: [], error: null }) }),
-    }),
-  };
+  });
+} else {
+  try {
+    supabaseInstance = new MockSupabaseClient();
+  } catch (error) {
+    console.error('Failed to create Supabase mock client:', error);
+    // Create a minimal fallback
+    supabaseInstance = {
+      auth: {
+        getSession: async () => ({ data: { session: null }, error: null }),
+        signUp: async () => ({ data: null, error: { message: 'Not initialized' } }),
+        signInWithPassword: async () => ({ data: null, error: { message: 'Not initialized' } }),
+        signOut: async () => ({ error: null }),
+        getUser: async () => ({ data: { user: null }, error: null }),
+        signInWithOAuth: async () => ({ data: null, error: { message: 'Not initialized' } }),
+        onAuthStateChange: () => ({ data: { subscription: { unsubscribe: () => {} } } }),
+      },
+      from: () => ({
+        select: () => ({ then: (resolve: any) => resolve({ data: [], error: null }) }),
+      }),
+    };
+  }
 }
 
 export const supabase = supabaseInstance;
