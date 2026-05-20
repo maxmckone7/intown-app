@@ -14,6 +14,9 @@ export interface User {
   email: string;
   name: string | null;
   avatar_url: string | null;
+  location?: string | null;
+  interests?: string[] | null;
+  social_accounts?: Record<string, string> | null;
   created_at: string;
 }
 

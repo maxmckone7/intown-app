@@ -47,6 +47,9 @@ class MockSupabaseClient {
         email,
         name: options?.data?.name || null,
         avatar_url: null,
+        location: null,
+        interests: [],
+        social_accounts: {},
         created_at: new Date().toISOString(),
       });
       await this.setStoredData('users', users);
