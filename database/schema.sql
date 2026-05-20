@@ -10,8 +10,30 @@ CREATE TABLE IF NOT EXISTS public.users (
   email TEXT NOT NULL,
   name TEXT,
   avatar_url TEXT,
+  location TEXT,
+  interests TEXT[] NOT NULL DEFAULT '{}',
+  social_accounts JSONB NOT NULL DEFAULT '{}'::jsonb,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
+
+ALTER TABLE public.users
+  ADD COLUMN IF NOT EXISTS location TEXT,
+  ADD COLUMN IF NOT EXISTS interests TEXT[] NOT NULL DEFAULT '{}',
+  ADD COLUMN IF NOT EXISTS social_accounts JSONB NOT NULL DEFAULT '{}'::jsonb;
+
+-- Public profile pictures stored in Supabase Storage
+INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+VALUES (
+  'avatars',
+  'avatars',
+  true,
+  5242880,
+  ARRAY['image/jpeg', 'image/png', 'image/webp', 'image/gif']
+)
+ON CONFLICT (id) DO UPDATE SET
+  public = EXCLUDED.public,
+  file_size_limit = EXCLUDED.file_size_limit,
+  allowed_mime_types = EXCLUDED.allowed_mime_types;
 
 -- Friendships table
 CREATE TABLE IF NOT EXISTS public.friendships (
@@ -64,6 +86,34 @@ CREATE POLICY "Users can view friends' profiles" ON public.users
 CREATE POLICY "Users can update own profile" ON public.users
   FOR UPDATE USING (auth.uid() = id);
 
+CREATE POLICY "Users can create own profile" ON public.users
+  FOR INSERT WITH CHECK (auth.uid() = id);
+
+-- RLS Policies for public avatar uploads
+CREATE POLICY "Avatar images are publicly accessible" ON storage.objects
+  FOR SELECT USING (bucket_id = 'avatars');
+
+CREATE POLICY "Users can upload own avatar" ON storage.objects
+  FOR INSERT WITH CHECK (
+    bucket_id = 'avatars'
+    AND auth.uid()::text = (storage.foldername(name))[1]
+  );
+
+CREATE POLICY "Users can update own avatar" ON storage.objects
+  FOR UPDATE USING (
+    bucket_id = 'avatars'
+    AND auth.uid()::text = (storage.foldername(name))[1]
+  ) WITH CHECK (
+    bucket_id = 'avatars'
+    AND auth.uid()::text = (storage.foldername(name))[1]
+  );
+
+CREATE POLICY "Users can delete own avatar" ON storage.objects
+  FOR DELETE USING (
+    bucket_id = 'avatars'
+    AND auth.uid()::text = (storage.foldername(name))[1]
+  );
+
 -- RLS Policies for friendships table
 CREATE POLICY "Users can view own friendships" ON public.friendships
   FOR SELECT USING (user_id = auth.uid() OR friend_id = auth.uid());
@@ -103,12 +153,24 @@ CREATE POLICY "Users can delete own calendar entries" ON public.calendar_entries
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER AS $$
 BEGIN
-  INSERT INTO public.users (id, email, name)
+  INSERT INTO public.users (id, email, name, avatar_url)
   VALUES (
     NEW.id,
     NEW.email,
-    COALESCE(NEW.raw_user_meta_data->>'name', NEW.email)
-  );
+    COALESCE(
+      NEW.raw_user_meta_data->>'name',
+      NEW.raw_user_meta_data->>'full_name',
+      NEW.email
+    ),
+    COALESCE(
+      NEW.raw_user_meta_data->>'avatar_url',
+      NEW.raw_user_meta_data->>'picture'
+    )
+  )
+  ON CONFLICT (id) DO UPDATE SET
+    email = EXCLUDED.email,
+    name = EXCLUDED.name,
+    avatar_url = EXCLUDED.avatar_url;
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
