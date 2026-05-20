@@ -12,6 +12,7 @@ import {
 import { useRouter } from 'expo-router';
 import { authService } from '../../services/auth';
 import Button from '../../components/Button';
+import { colors } from '../../theme';
 
 // Web-compatible alert function
 const showAlert = (title: string, message: string) => {
@@ -177,7 +178,7 @@ export default function SignUpScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: colors.background.primary,
   },
   content: {
     flex: 1,
@@ -189,20 +190,20 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     textAlign: 'center',
     marginBottom: 8,
-    color: '#111',
+    color: colors.text.primary,
   },
   subtitle: {
     fontSize: 16,
     textAlign: 'center',
     marginBottom: 40,
-    color: '#555',
+    color: colors.text.secondary,
   },
   form: {
     width: '100%',
   },
   input: {
     borderWidth: 1,
-    borderColor: '#ddd',
+    borderColor: colors.border.default,
     borderRadius: 8,
     padding: 16,
     fontSize: 16,
@@ -220,11 +221,11 @@ const styles = StyleSheet.create({
   dividerLine: {
     flex: 1,
     height: 1,
-    backgroundColor: '#ddd',
+    backgroundColor: colors.border.default,
   },
   dividerText: {
     marginHorizontal: 16,
-    color: '#6B6B6B',
+    color: colors.text.tertiary,
     fontSize: 16,
     fontWeight: '600',
   },
@@ -236,7 +237,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   linkText: {
-    color: '#555',
+    color: colors.text.secondary,
     fontSize: 16,
   },
   linkTextBold: {
