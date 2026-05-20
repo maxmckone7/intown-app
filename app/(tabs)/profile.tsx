@@ -9,6 +9,7 @@ import {
   TextInput,
   ScrollView,
   Image,
+  Platform,
 } from 'react-native';
 import type { KeyboardTypeOptions } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
@@ -109,6 +110,7 @@ export default function ProfileScreen() {
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
   const [avatarUploading, setAvatarUploading] = useState(false);
   const [name, setName] = useState('');
   const [location, setLocation] = useState('');
@@ -119,6 +121,14 @@ export default function ProfileScreen() {
   useEffect(() => {
     loadUser();
   }, []);
+
+  const navigateToLogin = () => {
+    if (Platform.OS === 'web') {
+      router.push('/(auth)/login');
+    } else {
+      router.replace('/(auth)/login');
+    }
+  };
 
   const populateProfileForm = (profile: User) => {
     setName(profile.name || '');
@@ -131,7 +141,7 @@ export default function ProfileScreen() {
     try {
       const authUser = await authService.getCurrentUser();
       if (!authUser) {
-        router.replace('/(auth)/login');
+        navigateToLogin();
         return;
       }
 
@@ -267,26 +277,18 @@ export default function ProfileScreen() {
     }
   };
 
-  const handleSignOut = () => {
-    Alert.alert(
-      'Sign Out',
-      'Are you sure you want to sign out?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Sign Out',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await authService.signOut();
-              router.replace('/(auth)/login');
-            } catch (error: any) {
-              Alert.alert('Error', error.message || 'Failed to sign out');
-            }
-          },
-        },
-      ]
-    );
+  const handleSignOut = async () => {
+    if (signingOut) return;
+
+    setSigningOut(true);
+    try {
+      await authService.signOut();
+      setUser(null);
+      navigateToLogin();
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to sign out');
+      setSigningOut(false);
+    }
   };
 
   if (loading) {
@@ -492,8 +494,16 @@ export default function ProfileScreen() {
         <InviteFriends />
       </View>
 
-      <TouchableOpacity style={styles.signOutButton} onPress={handleSignOut}>
-        <Text style={styles.signOutButtonText}>Sign Out</Text>
+      <TouchableOpacity
+        style={[styles.signOutButton, signingOut && styles.disabledButton]}
+        onPress={handleSignOut}
+        disabled={signingOut}
+      >
+        {signingOut ? (
+          <ActivityIndicator color="#fff" />
+        ) : (
+          <Text style={styles.signOutButtonText}>Sign Out</Text>
+        )}
       </TouchableOpacity>
     </ScrollView>
   );
