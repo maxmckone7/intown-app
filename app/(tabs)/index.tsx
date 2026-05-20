@@ -12,12 +12,14 @@ import { friendsService } from '../../services/friends';
 import { FriendWithStatus } from '../../lib/types';
 import InviteFriends from '../../components/InviteFriends';
 import FriendsCalendar from '../../components/FriendsCalendar';
+import DayDetailModal from '../../components/DayDetailModal';
 import { colors } from '../../theme';
 
 export default function FriendsCalendarScreen() {
   const router = useRouter();
   const [friends, setFriends] = useState<FriendWithStatus[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
 
   useEffect(() => {
     loadUserAndFriends();
@@ -48,15 +50,27 @@ export default function FriendsCalendarScreen() {
   }
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <FriendsCalendar
-        totalFriends={friends.length}
-        onAddFriendsPress={() => router.push('/(tabs)/friends')}
+    <>
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={styles.content}
+      >
+        <FriendsCalendar
+          totalFriends={friends.length}
+          onDayPress={(iso) => setSelectedDate(iso)}
+          onAddFriendsPress={() => router.push('/(tabs)/friends')}
+        />
+        <View style={styles.inviteSection}>
+          <InviteFriends />
+        </View>
+      </ScrollView>
+      <DayDetailModal
+        visible={selectedDate !== null}
+        date={selectedDate}
+        friends={friends}
+        onClose={() => setSelectedDate(null)}
       />
-      <View style={styles.inviteSection}>
-        <InviteFriends />
-      </View>
-    </ScrollView>
+    </>
   );
 }
 
