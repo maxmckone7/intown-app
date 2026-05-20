@@ -9,6 +9,7 @@ import {
   TextInput,
   ScrollView,
   Image,
+  Platform,
 } from 'react-native';
 import type { KeyboardTypeOptions } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
@@ -67,6 +68,31 @@ const getSocialAccountCount = (value?: Record<string, string> | null) =>
 
 const getAvatarInitial = (profile: User) =>
   profile.name?.charAt(0).toUpperCase() || profile.email.charAt(0).toUpperCase();
+
+const showConfirmation = (
+  title: string,
+  message: string,
+  confirmText: string,
+  onConfirm: () => void | Promise<void>
+) => {
+  if (Platform.OS === 'web' && typeof window !== 'undefined') {
+    if (window.confirm(`${title}\n\n${message}`)) {
+      void onConfirm();
+    }
+    return;
+  }
+
+  Alert.alert(title, message, [
+    { text: 'Cancel', style: 'cancel' },
+    {
+      text: confirmText,
+      style: 'destructive',
+      onPress: () => {
+        void onConfirm();
+      },
+    },
+  ]);
+};
 
 const getImageExtension = (asset: ImagePicker.ImagePickerAsset) => {
   const source = asset.fileName || asset.uri;
@@ -268,24 +294,18 @@ export default function ProfileScreen() {
   };
 
   const handleSignOut = () => {
-    Alert.alert(
+    showConfirmation(
       'Sign Out',
       'Are you sure you want to sign out?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Sign Out',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await authService.signOut();
-              router.replace('/(auth)/login');
-            } catch (error: any) {
-              Alert.alert('Error', error.message || 'Failed to sign out');
-            }
-          },
-        },
-      ]
+      'Sign Out',
+      async () => {
+        try {
+          await authService.signOut();
+          router.replace('/(auth)/login');
+        } catch (error: any) {
+          Alert.alert('Error', error.message || 'Failed to sign out');
+        }
+      }
     );
   };
 
