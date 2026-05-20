@@ -28,6 +28,7 @@ import {
   spacing,
   typography,
 } from '../theme';
+import { useToast } from './ToastProvider';
 
 type DayStatus = 'in_town' | 'away';
 
@@ -50,6 +51,7 @@ export default function MyCalendar() {
   const today = startOfToday();
   const [viewMonth, setViewMonth] = useState<Date>(startOfMonth(today));
   const [statusByDate, setStatusByDate] = useState<PersonalStatusMap>({});
+  const toast = useToast();
 
   const visibleDays = useMemo(() => {
     const gridStart = startOfWeek(startOfMonth(viewMonth), { weekStartsOn: 0 });
@@ -62,11 +64,12 @@ export default function MyCalendar() {
   const goToday = () => setViewMonth(startOfMonth(today));
 
   const toggleDay = (iso: string) => {
-    setStatusByDate((prev) => {
-      const current = prev[iso] ?? 'away';
-      const next: DayStatus = current === 'in_town' ? 'away' : 'in_town';
-      return { ...prev, [iso]: next };
-    });
+    const current = statusByDate[iso] ?? 'away';
+    const next: DayStatus = current === 'in_town' ? 'away' : 'in_town';
+    setStatusByDate((prev) => ({ ...prev, [iso]: next }));
+    toast.success(
+      next === 'in_town' ? 'Status updated — in town' : 'Status updated — away'
+    );
   };
 
   const statusFor = (iso: string): DayStatus => statusByDate[iso] ?? 'away';

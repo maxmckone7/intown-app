@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react';
 import {
   View,
   StyleSheet,
-  ActivityIndicator,
   Alert,
   ScrollView,
 } from 'react-native';
@@ -13,6 +12,7 @@ import { FriendWithStatus } from '../../lib/types';
 import InviteFriends from '../../components/InviteFriends';
 import FriendsCalendar from '../../components/FriendsCalendar';
 import DayDetailModal from '../../components/DayDetailModal';
+import { CalendarSkeleton } from '../../components/Skeleton';
 import { colors } from '../../theme';
 
 export default function FriendsCalendarScreen() {
@@ -43,8 +43,8 @@ export default function FriendsCalendarScreen() {
 
   if (loading) {
     return (
-      <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color={colors.brand.primary} />
+      <View style={styles.container}>
+        <CalendarSkeleton />
       </View>
     );
   }

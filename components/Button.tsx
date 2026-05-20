@@ -45,10 +45,11 @@ export default function Button({
       disabled={isInactive}
       accessibilityRole="button"
       accessibilityState={{ disabled: isInactive, busy: loading }}
-      style={({ pressed }) => [
+      style={({ pressed, hovered }: any) => [
         styles.base,
         sizeStyles.container,
         variantStyles.container,
+        hovered && !isInactive && !pressed && styles.hovered,
         pressed && !isInactive && [styles.pressed, variantStyles.pressed],
         isInactive && styles.inactive,
         fullWidth && styles.fullWidth,
@@ -82,6 +83,14 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS,
     borderWidth: 1,
     borderColor: 'transparent',
+  },
+  hovered: {
+    transform: [{ translateY: -1 }],
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
   },
   pressed: {
     transform: [{ scale: 0.97 }],

@@ -16,6 +16,7 @@ import { friendsService } from '../../services/friends';
 import { FriendWithStatus } from '../../lib/types';
 import Button from '../../components/Button';
 import AddFriendModal from '../../components/AddFriendModal';
+import { FriendsListSkeleton } from '../../components/Skeleton';
 import {
   colors,
   fontFamilies,
@@ -134,8 +135,15 @@ export default function FriendsScreen() {
 
   if (loading) {
     return (
-      <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color={colors.brand.primary} />
+      <View style={styles.outer}>
+        <View style={styles.inner}>
+          <View style={styles.headerRow}>
+            <View style={styles.headerText}>
+              <Text style={styles.title}>Friends</Text>
+            </View>
+          </View>
+          <FriendsListSkeleton />
+        </View>
       </View>
     );
   }
@@ -191,7 +199,9 @@ export default function FriendsScreen() {
 
         {showEmptyState ? (
           <View style={styles.emptyState}>
-            <View style={styles.emptyCircle} />
+            <View style={styles.emptyCircle}>
+              <Text style={styles.emptyGlyph}>👋</Text>
+            </View>
             <Text style={styles.emptyTitle}>No friends yet</Text>
             <Text style={styles.emptyBody}>
               Add friends to see when they're in town and start planning
@@ -457,6 +467,12 @@ const styles = StyleSheet.create({
     borderRadius: 32,
     backgroundColor: colors.background.secondary,
     marginBottom: spacing[2],
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyGlyph: {
+    fontSize: 28,
+    lineHeight: 32,
   },
   emptyTitle: {
     fontFamily: fontFamilies.fraunces.medium,

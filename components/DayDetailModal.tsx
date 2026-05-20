@@ -21,6 +21,7 @@ import {
   typography,
 } from '../theme';
 import { FriendWithStatus } from '../lib/types';
+import { useReducedMotion } from '../lib/use-reduced-motion';
 
 type Props = {
   visible: boolean;
@@ -79,9 +80,15 @@ export default function DayDetailModal({
 }: Props) {
   const opacity = useRef(new Animated.Value(0)).current;
   const translateY = useRef(new Animated.Value(30)).current;
+  const reducedMotion = useReducedMotion();
 
   useEffect(() => {
     if (visible) {
+      if (reducedMotion) {
+        opacity.setValue(1);
+        translateY.setValue(0);
+        return;
+      }
       Animated.parallel([
         Animated.timing(opacity, {
           toValue: 1,
@@ -101,7 +108,7 @@ export default function DayDetailModal({
       opacity.setValue(0);
       translateY.setValue(30);
     }
-  }, [visible, opacity, translateY]);
+  }, [visible, opacity, translateY, reducedMotion]);
 
   // ESC key support on web
   useEffect(() => {
@@ -177,7 +184,7 @@ export default function DayDetailModal({
           {inTownFriends.length === 0 ? (
             <View style={styles.emptyState}>
               <View style={styles.emptyIllustration}>
-                <Text style={styles.emptyIllustrationGlyph}>·</Text>
+                <Text style={styles.emptyIllustrationGlyph}>🏖️</Text>
               </View>
               <Text style={styles.emptyTitle}>
                 Nobody's around on this day yet
@@ -403,9 +410,8 @@ const styles = StyleSheet.create({
     marginBottom: spacing[3],
   },
   emptyIllustrationGlyph: {
-    fontSize: 36,
+    fontSize: 32,
     lineHeight: 36,
-    color: colors.text.tertiary,
   },
   emptyTitle: {
     fontFamily: fontFamilies.fraunces.medium,
