@@ -16,6 +16,7 @@ import { calendarService } from '../../services/calendar';
 import { CalendarEntry, CalendarStatus, User, FriendWithStatus } from '../../lib/types';
 import InviteFriends from '../../components/InviteFriends';
 import Button from '../../components/Button';
+import Header from '../../components/Header';
 
 type FriendCalendarEntry = CalendarEntry & {
   friend_name: string;
@@ -318,6 +319,7 @@ export default function FriendsScreen() {
 
   return (
     <View style={styles.container}>
+      <Header />
       <View style={styles.tabs}>
         <TouchableOpacity
           style={[styles.tab, activeTab === 'calendar' && styles.activeTab]}
