@@ -11,6 +11,7 @@ import { authService } from '../../services/auth';
 import { calendarService } from '../../services/calendar';
 import { CalendarEntry, CalendarStatus } from '../../lib/types';
 import Header from '../../components/Header';
+import { colors } from '../../theme';
 
 export default function MyCalendarScreen() {
   const [entries, setEntries] = useState<Record<string, any>>({});
@@ -276,7 +277,7 @@ export default function MyCalendarScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fafafa',
+    backgroundColor: colors.background.primary,
   },
   centerContainer: {
     flex: 1,

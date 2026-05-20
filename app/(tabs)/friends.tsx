@@ -17,6 +17,7 @@ import { CalendarEntry, CalendarStatus, User, FriendWithStatus } from '../../lib
 import InviteFriends from '../../components/InviteFriends';
 import Button from '../../components/Button';
 import Header from '../../components/Header';
+import { colors } from '../../theme';
 
 type FriendCalendarEntry = CalendarEntry & {
   friend_name: string;
@@ -494,7 +495,7 @@ export default function FriendsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: colors.background.primary,
   },
   centerContainer: {
     flex: 1,
@@ -504,7 +505,7 @@ const styles = StyleSheet.create({
   tabs: {
     flexDirection: 'row',
     borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    borderBottomColor: colors.border.subtle,
   },
   tab: {
     flex: 1,
@@ -517,7 +518,7 @@ const styles = StyleSheet.create({
   },
   tabText: {
     fontSize: 16,
-    color: '#555',
+    color: colors.text.secondary,
     fontWeight: '600',
   },
   activeTabText: {
@@ -536,7 +537,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     padding: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    borderBottomColor: colors.border.subtle,
   },
   friendInfo: {
     flexDirection: 'row',
@@ -563,12 +564,12 @@ const styles = StyleSheet.create({
   friendName: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#111',
+    color: colors.text.primary,
     marginBottom: 4,
   },
   friendEmail: {
     fontSize: 16,
-    color: '#6B6B6B',
+    color: colors.text.tertiary,
   },
   followingText: {
     color: '#2E7D32',
@@ -583,7 +584,7 @@ const styles = StyleSheet.create({
   searchInput: {
     flex: 1,
     borderWidth: 1,
-    borderColor: '#ddd',
+    borderColor: colors.border.default,
     borderRadius: 8,
     padding: 12,
     fontSize: 16,
@@ -598,12 +599,12 @@ const styles = StyleSheet.create({
   emptyStateText: {
     fontSize: 24,
     fontWeight: '700',
-    color: '#111',
+    color: colors.text.primary,
     marginBottom: 8,
   },
   emptyStateSubtext: {
     fontSize: 16,
-    color: '#555',
+    color: colors.text.secondary,
     textAlign: 'center',
     lineHeight: 22,
   },
@@ -648,13 +649,13 @@ const styles = StyleSheet.create({
     borderColor: '#E1EDFF',
   },
   dateSummaryTitle: {
-    color: '#111',
+    color: colors.text.primary,
     fontSize: 24,
     fontWeight: '700',
     marginBottom: 8,
   },
   dateSummaryText: {
-    color: '#555',
+    color: colors.text.secondary,
     fontSize: 16,
     lineHeight: 22,
   },
@@ -667,7 +668,7 @@ const styles = StyleSheet.create({
     borderTopColor: '#E1EDFF',
   },
   availabilityName: {
-    color: '#111',
+    color: colors.text.primary,
     flex: 1,
     fontSize: 16,
     fontWeight: '700',
@@ -692,7 +693,7 @@ const styles = StyleSheet.create({
   inviteSection: {
     paddingTop: 20,
     borderTopWidth: 1,
-    borderTopColor: '#eee',
+    borderTopColor: colors.border.subtle,
     marginTop: 20,
   },
 });

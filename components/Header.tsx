@@ -1,6 +1,7 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { usePathname, useRouter } from 'expo-router';
+import { colors } from '../theme';
 
 const HEADER_HEIGHT = 56;
 
@@ -41,9 +42,9 @@ export default function Header() {
 
 const styles = StyleSheet.create({
   outer: {
-    backgroundColor: '#fff',
+    backgroundColor: colors.background.card,
     borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    borderBottomColor: colors.border.subtle,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
@@ -67,7 +68,7 @@ const styles = StyleSheet.create({
   logoText: {
     fontSize: 22,
     fontWeight: '900',
-    color: '#ff2d55',
+    color: colors.brand.primary,
     letterSpacing: 0.5,
   },
   logoUnderline: {

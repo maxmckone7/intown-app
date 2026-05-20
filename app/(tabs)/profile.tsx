@@ -20,6 +20,7 @@ import { User } from '../../lib/types';
 import InviteFriends from '../../components/InviteFriends';
 import Button from '../../components/Button';
 import Header from '../../components/Header';
+import { colors } from '../../theme';
 
 type SocialKey = 'instagram' | 'x' | 'linkedin' | 'website';
 type SocialAccounts = Partial<Record<SocialKey, string>>;
@@ -509,11 +510,11 @@ export default function ProfileScreen() {
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: colors.background.primary,
   },
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: colors.background.primary,
   },
   contentContainer: {
     paddingBottom: 20,
@@ -527,7 +528,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 32,
     borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    borderBottomColor: colors.border.subtle,
   },
   avatar: {
     width: 100,
@@ -556,7 +557,7 @@ const styles = StyleSheet.create({
   },
   email: {
     fontSize: 16,
-    color: '#555',
+    color: colors.text.secondary,
   },
   photoActions: {
     flexDirection: 'row',
@@ -576,7 +577,7 @@ const styles = StyleSheet.create({
   section: {
     padding: 20,
     borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    borderBottomColor: colors.border.subtle,
   },
   sectionHeader: {
     flexDirection: 'row',
@@ -588,23 +589,23 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 24,
     fontWeight: '700',
-    color: '#111',
+    color: colors.text.primary,
     marginBottom: 4,
   },
   sectionSubtitle: {
     fontSize: 16,
-    color: '#555',
+    color: colors.text.secondary,
     lineHeight: 22,
   },
   label: {
     fontSize: 16,
-    color: '#6B6B6B',
+    color: colors.text.tertiary,
     marginBottom: 8,
     fontWeight: '500',
   },
   value: {
     fontSize: 16,
-    color: '#111',
+    color: colors.text.primary,
     fontWeight: '700',
   },
   editButton: {
@@ -621,13 +622,13 @@ const styles = StyleSheet.create({
   },
   fieldLabel: {
     fontSize: 16,
-    color: '#111',
+    color: colors.text.primary,
     fontWeight: '600',
     marginBottom: 8,
   },
   input: {
     borderWidth: 1,
-    borderColor: '#ddd',
+    borderColor: colors.border.default,
     borderRadius: 8,
     padding: 12,
     fontSize: 16,
@@ -639,7 +640,7 @@ const styles = StyleSheet.create({
     textAlignVertical: 'top',
   },
   helperText: {
-    color: '#555',
+    color: colors.text.secondary,
     fontSize: 14,
     marginTop: -4,
     marginBottom: 16,
@@ -647,7 +648,7 @@ const styles = StyleSheet.create({
   socialHeading: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#111',
+    color: colors.text.primary,
     marginTop: 4,
     marginBottom: 12,
   },
@@ -682,12 +683,12 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   socialLabel: {
-    color: '#6B6B6B',
+    color: colors.text.tertiary,
     fontSize: 16,
     fontWeight: '500',
   },
   socialValue: {
-    color: '#111',
+    color: colors.text.primary,
     flex: 1,
     fontSize: 16,
     fontWeight: '600',
