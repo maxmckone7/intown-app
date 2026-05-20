@@ -1,18 +1,16 @@
 import { useState, useEffect } from 'react';
 import {
   View,
-  Text,
   StyleSheet,
   ActivityIndicator,
   Alert,
-  TouchableOpacity,
-  Animated,
   Platform,
 } from 'react-native';
 import { Calendar, DateData } from 'react-native-calendars';
 import { authService } from '../../services/auth';
 import { calendarService } from '../../services/calendar';
 import { CalendarEntry, CalendarStatus } from '../../lib/types';
+import Header from '../../components/Header';
 
 export default function MyCalendarScreen() {
   const [entries, setEntries] = useState<Record<string, any>>({});
@@ -215,10 +213,7 @@ export default function MyCalendarScreen() {
 
   return (
     <View style={styles.container}>
-      {/* InTown Title */}
-      <View style={styles.titleContainer}>
-        <Text style={styles.appTitle}>InTown</Text>
-      </View>
+      <Header />
 
       <Calendar
         onDayPress={handleDatePress}
@@ -287,25 +282,6 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  titleContainer: {
-    paddingTop: Platform.OS === 'web' ? 20 : 10,
-    paddingBottom: 16,
-    paddingHorizontal: 20,
-    backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  appTitle: {
-    fontSize: 36,
-    fontWeight: '800',
-    color: '#333',
-    letterSpacing: -0.5,
   },
 });
 

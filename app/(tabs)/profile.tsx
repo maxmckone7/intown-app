@@ -19,6 +19,7 @@ import { supabase } from '../../lib/supabase';
 import { User } from '../../lib/types';
 import InviteFriends from '../../components/InviteFriends';
 import Button from '../../components/Button';
+import Header from '../../components/Header';
 
 type SocialKey = 'instagram' | 'x' | 'linkedin' | 'website';
 type SocialAccounts = Partial<Record<SocialKey, string>>;
@@ -305,7 +306,9 @@ export default function ProfileScreen() {
   }
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
+    <View style={styles.screen}>
+      <Header />
+      <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
       <View style={styles.header}>
         <TouchableOpacity
           style={styles.avatar}
@@ -498,11 +501,16 @@ export default function ProfileScreen() {
         disabled={signingOut}
         style={styles.signOutButton}
       />
-    </ScrollView>
+      </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  screen: {
+    flex: 1,
+    backgroundColor: '#fff',
+  },
   container: {
     flex: 1,
     backgroundColor: '#fff',
