@@ -189,13 +189,13 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     textAlign: 'center',
     marginBottom: 8,
-    color: '#333',
+    color: '#111',
   },
   subtitle: {
     fontSize: 16,
     textAlign: 'center',
     marginBottom: 40,
-    color: '#666',
+    color: '#555',
   },
   form: {
     width: '100%',
@@ -224,8 +224,9 @@ const styles = StyleSheet.create({
   },
   dividerText: {
     marginHorizontal: 16,
-    color: '#666',
-    fontSize: 14,
+    color: '#6B6B6B',
+    fontSize: 16,
+    fontWeight: '600',
   },
   socialButton: {
     marginBottom: 12,
@@ -235,12 +236,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   linkText: {
-    color: '#666',
-    fontSize: 14,
+    color: '#555',
+    fontSize: 16,
   },
   linkTextBold: {
     color: '#007AFF',
-    fontWeight: '600',
+    fontWeight: '700',
   },
 });
 

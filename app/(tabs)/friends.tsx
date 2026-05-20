@@ -517,11 +517,12 @@ const styles = StyleSheet.create({
   },
   tabText: {
     fontSize: 16,
-    color: '#666',
+    color: '#555',
+    fontWeight: '600',
   },
   activeTabText: {
     color: '#007AFF',
-    fontWeight: '600',
+    fontWeight: '700',
   },
   content: {
     flex: 1,
@@ -561,18 +562,18 @@ const styles = StyleSheet.create({
   },
   friendName: {
     fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
+    fontWeight: '700',
+    color: '#111',
     marginBottom: 4,
   },
   friendEmail: {
-    fontSize: 14,
-    color: '#666',
+    fontSize: 16,
+    color: '#6B6B6B',
   },
   followingText: {
-    color: '#4CAF50',
-    fontSize: 14,
-    fontWeight: '600',
+    color: '#2E7D32',
+    fontSize: 16,
+    fontWeight: '700',
   },
   searchContainer: {
     flexDirection: 'row',
@@ -595,15 +596,16 @@ const styles = StyleSheet.create({
     padding: 40,
   },
   emptyStateText: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#333',
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#111',
     marginBottom: 8,
   },
   emptyStateSubtext: {
-    fontSize: 14,
-    color: '#666',
+    fontSize: 16,
+    color: '#555',
     textAlign: 'center',
+    lineHeight: 22,
   },
   legend: {
     padding: 20,
@@ -646,15 +648,15 @@ const styles = StyleSheet.create({
     borderColor: '#E1EDFF',
   },
   dateSummaryTitle: {
-    color: '#333',
-    fontSize: 17,
+    color: '#111',
+    fontSize: 24,
     fontWeight: '700',
     marginBottom: 8,
   },
   dateSummaryText: {
-    color: '#666',
-    fontSize: 14,
-    lineHeight: 20,
+    color: '#555',
+    fontSize: 16,
+    lineHeight: 22,
   },
   availabilityRow: {
     flexDirection: 'row',
@@ -665,18 +667,18 @@ const styles = StyleSheet.create({
     borderTopColor: '#E1EDFF',
   },
   availabilityName: {
-    color: '#333',
+    color: '#111',
     flex: 1,
-    fontSize: 15,
-    fontWeight: '600',
+    fontSize: 16,
+    fontWeight: '700',
     marginRight: 12,
   },
   availabilityStatus: {
     borderRadius: 999,
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '700',
     overflow: 'hidden',
-    paddingHorizontal: 10,
+    paddingHorizontal: 12,
     paddingVertical: 4,
   },
   availabilityInTown: {

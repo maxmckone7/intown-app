@@ -556,7 +556,7 @@ const styles = StyleSheet.create({
   },
   email: {
     fontSize: 16,
-    color: '#666',
+    color: '#555',
   },
   photoActions: {
     flexDirection: 'row',
@@ -569,9 +569,9 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   removePhotoButtonText: {
-    color: '#F44336',
-    fontSize: 14,
-    fontWeight: '600',
+    color: '#C62828',
+    fontSize: 16,
+    fontWeight: '700',
   },
   section: {
     padding: 20,
@@ -586,25 +586,26 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   sectionTitle: {
-    fontSize: 20,
+    fontSize: 24,
     fontWeight: '700',
-    color: '#333',
+    color: '#111',
     marginBottom: 4,
   },
   sectionSubtitle: {
-    fontSize: 14,
-    color: '#666',
-    lineHeight: 20,
+    fontSize: 16,
+    color: '#555',
+    lineHeight: 22,
   },
   label: {
-    fontSize: 14,
-    color: '#666',
+    fontSize: 16,
+    color: '#6B6B6B',
     marginBottom: 8,
-    fontWeight: '600',
+    fontWeight: '500',
   },
   value: {
     fontSize: 16,
-    color: '#333',
+    color: '#111',
+    fontWeight: '700',
   },
   editButton: {
     paddingHorizontal: 12,
@@ -612,15 +613,15 @@ const styles = StyleSheet.create({
   },
   editButtonText: {
     color: '#007AFF',
-    fontSize: 14,
-    fontWeight: '600',
+    fontSize: 16,
+    fontWeight: '700',
   },
   editContainer: {
     marginTop: 8,
   },
   fieldLabel: {
-    fontSize: 14,
-    color: '#333',
+    fontSize: 16,
+    color: '#111',
     fontWeight: '600',
     marginBottom: 8,
   },
@@ -638,15 +639,15 @@ const styles = StyleSheet.create({
     textAlignVertical: 'top',
   },
   helperText: {
-    color: '#777',
-    fontSize: 13,
+    color: '#555',
+    fontSize: 14,
     marginTop: -4,
     marginBottom: 16,
   },
   socialHeading: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '700',
-    color: '#333',
+    color: '#111',
     marginTop: 4,
     marginBottom: 12,
   },
@@ -668,9 +669,9 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   chipText: {
-    color: '#007AFF',
+    color: '#0062CC',
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: '700',
   },
   socialList: {
     gap: 10,
@@ -681,14 +682,15 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   socialLabel: {
-    color: '#666',
-    fontSize: 15,
-    fontWeight: '600',
+    color: '#6B6B6B',
+    fontSize: 16,
+    fontWeight: '500',
   },
   socialValue: {
-    color: '#333',
+    color: '#111',
     flex: 1,
-    fontSize: 15,
+    fontSize: 16,
+    fontWeight: '600',
     textAlign: 'right',
   },
   editButtons: {
