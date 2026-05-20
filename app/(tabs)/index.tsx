@@ -220,7 +220,8 @@ export default function MyCalendarScreen() {
         <Text style={styles.appTitle}>InTown</Text>
       </View>
 
-      <Calendar
+      <View style={styles.calendarWrapper}>
+        <Calendar
         onDayPress={handleDatePress}
         onMonthChange={handleMonthChange}
         markedDates={{
@@ -274,6 +275,7 @@ export default function MyCalendarScreen() {
           setTimeout(() => setHoveredDate(null), 200);
         }}
       />
+      </View>
     </View>
   );
 }
@@ -289,9 +291,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   titleContainer: {
-    paddingTop: Platform.OS === 'web' ? 20 : 10,
-    paddingBottom: 16,
-    paddingHorizontal: 20,
+    paddingTop: Platform.OS === 'web' ? 24 : 16,
+    paddingBottom: 24,
+    paddingHorizontal: 16,
     backgroundColor: '#fff',
     borderBottomWidth: 1,
     borderBottomColor: '#e0e0e0',
@@ -306,6 +308,10 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: '#333',
     letterSpacing: -0.5,
+  },
+  calendarWrapper: {
+    paddingHorizontal: 16,
+    paddingTop: 24,
   },
 });
 

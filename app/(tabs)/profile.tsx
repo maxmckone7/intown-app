@@ -190,7 +190,8 @@ const styles = StyleSheet.create({
   },
   header: {
     alignItems: 'center',
-    padding: 32,
+    paddingHorizontal: 16,
+    paddingVertical: 32,
     borderBottomWidth: 1,
     borderBottomColor: '#eee',
   },
@@ -213,7 +214,8 @@ const styles = StyleSheet.create({
     color: '#666',
   },
   section: {
-    padding: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 24,
     borderBottomWidth: 1,
     borderBottomColor: '#eee',
   },
@@ -280,7 +282,8 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   signOutButton: {
-    margin: 20,
+    marginHorizontal: 16,
+    marginVertical: 24,
     padding: 16,
     backgroundColor: '#F44336',
     borderRadius: 8,

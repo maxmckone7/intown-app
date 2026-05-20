@@ -172,7 +172,8 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     justifyContent: 'center',
-    padding: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 24,
   },
   title: {
     fontSize: 32,
@@ -184,7 +185,7 @@ const styles = StyleSheet.create({
   subtitle: {
     fontSize: 16,
     textAlign: 'center',
-    marginBottom: 40,
+    marginBottom: 24,
     color: '#666',
   },
   form: {

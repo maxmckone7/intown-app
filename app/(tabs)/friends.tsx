@@ -312,7 +312,8 @@ export default function FriendsScreen() {
 
       {activeTab === 'calendar' && (
         <View style={styles.content}>
-          <Calendar
+          <View style={styles.calendarWrapper}>
+            <Calendar
             markedDates={friendsCalendarEntries}
             markingType="custom"
             theme={{
@@ -328,6 +329,7 @@ export default function FriendsScreen() {
               textDisabledColor: '#d9e1e8',
             }}
           />
+          </View>
           {/* Invite Friends Section */}
           <View style={styles.inviteSection}>
             <InviteFriends />
@@ -484,7 +486,9 @@ const styles = StyleSheet.create({
   },
   searchContainer: {
     flexDirection: 'row',
-    padding: 16,
+    paddingHorizontal: 16,
+    paddingTop: 24,
+    paddingBottom: 16,
     gap: 12,
   },
   searchInput: {
@@ -558,10 +562,15 @@ const styles = StyleSheet.create({
     color: '#666',
   },
   inviteSection: {
-    paddingTop: 20,
+    paddingTop: 24,
+    paddingHorizontal: 16,
     borderTopWidth: 1,
     borderTopColor: '#eee',
-    marginTop: 20,
+    marginTop: 24,
+  },
+  calendarWrapper: {
+    paddingHorizontal: 16,
+    paddingTop: 24,
   },
 });
 

@@ -332,7 +332,8 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     justifyContent: 'center',
-    padding: 22,
+    paddingHorizontal: 16,
+    paddingVertical: 24,
   },
   heroBadge: {
     alignSelf: 'center',
@@ -342,7 +343,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffffcc',
     borderWidth: 1,
     borderColor: '#ffffff',
-    marginBottom: 18,
+    marginBottom: 24,
     shadowColor: '#ff3d7f',
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.18,
