@@ -9,12 +9,17 @@ import {
   ActivityIndicator,
   Alert,
 } from 'react-native';
-import { Calendar } from 'react-native-calendars';
+import { Calendar, DateData } from 'react-native-calendars';
 import { authService } from '../../services/auth';
 import { friendsService } from '../../services/friends';
 import { calendarService } from '../../services/calendar';
-import { User, FriendWithStatus } from '../../lib/types';
+import { CalendarEntry, CalendarStatus, User, FriendWithStatus } from '../../lib/types';
 import InviteFriends from '../../components/InviteFriends';
+
+type FriendCalendarEntry = CalendarEntry & {
+  friend_name: string;
+  friend_id: string;
+};
 
 export default function FriendsScreen() {
   // Default to calendar view (heatmap) as specified
@@ -25,6 +30,8 @@ export default function FriendsScreen() {
   const [loading, setLoading] = useState(true);
   const [searching, setSearching] = useState(false);
   const [friendsCalendarEntries, setFriendsCalendarEntries] = useState<Record<string, any>>({});
+  const [friendsEntriesByDate, setFriendsEntriesByDate] = useState<Record<string, FriendCalendarEntry[]>>({});
+  const [selectedFriendsDate, setSelectedFriendsDate] = useState<string | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -69,24 +76,30 @@ export default function FriendsScreen() {
     try {
       const entries = await calendarService.getFriendsEntries(userId);
       const markedDates: Record<string, any> = {};
+      const availabilityByDate: Record<string, FriendCalendarEntry[]> = {};
 
       // Group entries by date
-      const entriesByDate: Record<string, { inTown: number; outOfTown: number }> = {};
+      const countsByDate: Record<string, { inTown: number; outOfTown: number }> = {};
       
-      entries.forEach((entry: any) => {
-        if (!entriesByDate[entry.date]) {
-          entriesByDate[entry.date] = { inTown: 0, outOfTown: 0 };
+      entries.forEach((entry) => {
+        if (!availabilityByDate[entry.date]) {
+          availabilityByDate[entry.date] = [];
+        }
+        availabilityByDate[entry.date].push(entry);
+
+        if (!countsByDate[entry.date]) {
+          countsByDate[entry.date] = { inTown: 0, outOfTown: 0 };
         }
         if (entry.status === 'in_town') {
-          entriesByDate[entry.date].inTown++;
+          countsByDate[entry.date].inTown++;
         } else {
-          entriesByDate[entry.date].outOfTown++;
+          countsByDate[entry.date].outOfTown++;
         }
       });
 
       // Calculate heat map colors based on friend availability
-      Object.keys(entriesByDate).forEach((date) => {
-        const { inTown, outOfTown } = entriesByDate[date];
+      Object.keys(countsByDate).forEach((date) => {
+        const { inTown, outOfTown } = countsByDate[date];
         const total = inTown + outOfTown;
         
         if (total === 0) {
@@ -143,6 +156,7 @@ export default function FriendsScreen() {
       });
 
       setFriendsCalendarEntries(markedDates);
+      setFriendsEntriesByDate(availabilityByDate);
     } catch (error: any) {
       Alert.alert('Error', error.message || 'Failed to load friends calendar');
     }
@@ -159,6 +173,13 @@ export default function FriendsScreen() {
       Alert.alert('Error', error.message || 'Failed to search users');
     } finally {
       setSearching(false);
+    }
+  };
+
+  const handleSearchQueryChange = (value: string) => {
+    setSearchQuery(value);
+    if (!value.trim()) {
+      setSearchResults([]);
     }
   };
 
@@ -200,6 +221,31 @@ export default function FriendsScreen() {
       ]
     );
   };
+
+  const handleFriendsDatePress = (day: DateData) => {
+    setSelectedFriendsDate(day.dateString);
+  };
+
+  const getFriendAvailabilityForDate = (date: string) =>
+    friends.map((friend) => {
+      const explicitEntry = friendsEntriesByDate[date]?.find(
+        (entry) => entry.friend_id === friend.id
+      );
+
+      return {
+        friend,
+        status: (explicitEntry?.status || 'in_town') as CalendarStatus,
+      };
+    });
+
+  const formatCalendarDate = (date: string) =>
+    new Date(`${date}T00:00:00`).toLocaleDateString('en-US', {
+      weekday: 'short',
+      month: 'short',
+      day: 'numeric',
+    });
+
+  const getFriendName = (friend: FriendWithStatus) => friend.name || friend.email;
 
   const renderFriendItem = ({ item }: { item: FriendWithStatus }) => (
     <View style={styles.friendItem}>
@@ -261,6 +307,14 @@ export default function FriendsScreen() {
     );
   }
 
+  const isSearchDisabled = searching || !searchQuery.trim();
+  const selectedFriendAvailability = selectedFriendsDate
+    ? getFriendAvailabilityForDate(selectedFriendsDate)
+    : [];
+  const selectedDateMark = selectedFriendsDate
+    ? friendsCalendarEntries[selectedFriendsDate]
+    : undefined;
+
   return (
     <View style={styles.container}>
       <View style={styles.tabs}>
@@ -313,7 +367,31 @@ export default function FriendsScreen() {
       {activeTab === 'calendar' && (
         <View style={styles.content}>
           <Calendar
-            markedDates={friendsCalendarEntries}
+            onDayPress={handleFriendsDatePress}
+            markedDates={{
+              ...friendsCalendarEntries,
+              ...(selectedFriendsDate && {
+                [selectedFriendsDate]: {
+                  ...selectedDateMark,
+                  customStyles: {
+                    ...selectedDateMark?.customStyles,
+                    container: {
+                      ...selectedDateMark?.customStyles?.container,
+                      borderWidth: 2,
+                      borderColor: '#007AFF',
+                      backgroundColor:
+                        selectedDateMark?.customStyles?.container?.backgroundColor || '#EAF3FF',
+                      borderRadius: 8,
+                    },
+                    text: {
+                      ...selectedDateMark?.customStyles?.text,
+                      color: selectedDateMark?.customStyles?.text?.color || '#007AFF',
+                      fontWeight: '700',
+                    },
+                  },
+                },
+              }),
+            }}
             markingType="custom"
             theme={{
               todayTextColor: '#007AFF',
@@ -328,6 +406,44 @@ export default function FriendsScreen() {
               textDisabledColor: '#d9e1e8',
             }}
           />
+          <View style={styles.dateSummary}>
+            {friends.length === 0 ? (
+              <>
+                <Text style={styles.dateSummaryTitle}>No friends yet</Text>
+                <Text style={styles.dateSummaryText}>
+                  Add friends from Search to see their availability by date.
+                </Text>
+              </>
+            ) : selectedFriendsDate ? (
+              <>
+                <Text style={styles.dateSummaryTitle}>
+                  {formatCalendarDate(selectedFriendsDate)}
+                </Text>
+                {selectedFriendAvailability.map(({ friend, status }) => (
+                  <View key={friend.id} style={styles.availabilityRow}>
+                    <Text style={styles.availabilityName}>{getFriendName(friend)}</Text>
+                    <Text
+                      style={[
+                        styles.availabilityStatus,
+                        status === 'in_town'
+                          ? styles.availabilityInTown
+                          : styles.availabilityOutOfTown,
+                      ]}
+                    >
+                      {status === 'in_town' ? 'In town' : 'Out of town'}
+                    </Text>
+                  </View>
+                ))}
+              </>
+            ) : (
+              <>
+                <Text style={styles.dateSummaryTitle}>Friend availability</Text>
+                <Text style={styles.dateSummaryText}>
+                  Tap any date to see which friends are in town or out of town.
+                </Text>
+              </>
+            )}
+          </View>
           {/* Invite Friends Section */}
           <View style={styles.inviteSection}>
             <InviteFriends />
@@ -342,13 +458,13 @@ export default function FriendsScreen() {
               style={styles.searchInput}
               placeholder="Search by name or email..."
               value={searchQuery}
-              onChangeText={setSearchQuery}
+              onChangeText={handleSearchQueryChange}
               onSubmitEditing={handleSearch}
             />
             <TouchableOpacity
-              style={styles.searchButton}
+              style={[styles.searchButton, isSearchDisabled && styles.disabledButton]}
               onPress={handleSearch}
-              disabled={searching}
+              disabled={isSearchDisabled}
             >
               {searching ? (
                 <ActivityIndicator color="#fff" size="small" />
@@ -503,6 +619,9 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     justifyContent: 'center',
   },
+  disabledButton: {
+    opacity: 0.5,
+  },
   searchButtonText: {
     color: '#fff',
     fontSize: 16,
@@ -556,6 +675,56 @@ const styles = StyleSheet.create({
   legendText: {
     fontSize: 14,
     color: '#666',
+  },
+  dateSummary: {
+    margin: 16,
+    padding: 16,
+    borderRadius: 12,
+    backgroundColor: '#F7FAFF',
+    borderWidth: 1,
+    borderColor: '#E1EDFF',
+  },
+  dateSummaryTitle: {
+    color: '#333',
+    fontSize: 17,
+    fontWeight: '700',
+    marginBottom: 8,
+  },
+  dateSummaryText: {
+    color: '#666',
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  availabilityRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#E1EDFF',
+  },
+  availabilityName: {
+    color: '#333',
+    flex: 1,
+    fontSize: 15,
+    fontWeight: '600',
+    marginRight: 12,
+  },
+  availabilityStatus: {
+    borderRadius: 999,
+    fontSize: 13,
+    fontWeight: '700',
+    overflow: 'hidden',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  availabilityInTown: {
+    backgroundColor: '#E8F5E9',
+    color: '#2E7D32',
+  },
+  availabilityOutOfTown: {
+    backgroundColor: '#FFEBEE',
+    color: '#C62828',
   },
   inviteSection: {
     paddingTop: 20,
