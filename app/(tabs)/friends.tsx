@@ -15,6 +15,7 @@ import { friendsService } from '../../services/friends';
 import { calendarService } from '../../services/calendar';
 import { CalendarEntry, CalendarStatus, User, FriendWithStatus } from '../../lib/types';
 import InviteFriends from '../../components/InviteFriends';
+import Button from '../../components/Button';
 
 type FriendCalendarEntry = CalendarEntry & {
   friend_name: string;
@@ -260,12 +261,12 @@ export default function FriendsScreen() {
           <Text style={styles.friendEmail}>{item.email}</Text>
         </View>
       </View>
-      <TouchableOpacity
-        style={styles.unfollowButton}
+      <Button
+        label="Unfollow"
+        variant="secondary"
+        size="sm"
         onPress={() => handleUnfollow(item.id)}
-      >
-        <Text style={styles.unfollowButtonText}>Unfollow</Text>
-      </TouchableOpacity>
+      />
     </View>
   );
 
@@ -288,12 +289,12 @@ export default function FriendsScreen() {
         {isFollowing ? (
           <Text style={styles.followingText}>Following</Text>
         ) : (
-          <TouchableOpacity
-            style={styles.followButton}
+          <Button
+            label="Follow"
+            variant="primary"
+            size="sm"
             onPress={() => handleFollow(item.id)}
-          >
-            <Text style={styles.followButtonText}>Follow</Text>
-          </TouchableOpacity>
+          />
         )}
       </View>
     );
@@ -461,17 +462,13 @@ export default function FriendsScreen() {
               onChangeText={handleSearchQueryChange}
               onSubmitEditing={handleSearch}
             />
-            <TouchableOpacity
-              style={[styles.searchButton, isSearchDisabled && styles.disabledButton]}
+            <Button
+              label="Search"
+              variant="primary"
               onPress={handleSearch}
+              loading={searching}
               disabled={isSearchDisabled}
-            >
-              {searching ? (
-                <ActivityIndicator color="#fff" size="small" />
-              ) : (
-                <Text style={styles.searchButtonText}>Search</Text>
-              )}
-            </TouchableOpacity>
+            />
           </View>
 
           {searchResults.length === 0 && searchQuery ? (
@@ -570,29 +567,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#666',
   },
-  followButton: {
-    backgroundColor: '#007AFF',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 8,
-  },
-  followButtonText: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  unfollowButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#ddd',
-  },
-  unfollowButtonText: {
-    color: '#666',
-    fontSize: 14,
-    fontWeight: '600',
-  },
   followingText: {
     color: '#4CAF50',
     fontSize: 14,
@@ -611,21 +585,6 @@ const styles = StyleSheet.create({
     padding: 12,
     fontSize: 16,
     backgroundColor: '#f9f9f9',
-  },
-  searchButton: {
-    backgroundColor: '#007AFF',
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 8,
-    justifyContent: 'center',
-  },
-  disabledButton: {
-    opacity: 0.5,
-  },
-  searchButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
   },
   emptyState: {
     flex: 1,

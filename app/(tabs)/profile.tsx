@@ -18,6 +18,7 @@ import { authService } from '../../services/auth';
 import { supabase } from '../../lib/supabase';
 import { User } from '../../lib/types';
 import InviteFriends from '../../components/InviteFriends';
+import Button from '../../components/Button';
 
 type SocialKey = 'instagram' | 'x' | 'linkedin' | 'website';
 type SocialAccounts = Partial<Record<SocialKey, string>>;
@@ -324,15 +325,13 @@ export default function ProfileScreen() {
         </TouchableOpacity>
         <Text style={styles.email}>{user.email}</Text>
         <View style={styles.photoActions}>
-          <TouchableOpacity
-            style={styles.photoButton}
+          <Button
+            label={user.avatar_url ? 'Change Photo' : 'Add Photo'}
+            variant="primary"
+            size="sm"
             onPress={handlePickAvatar}
             disabled={avatarUploading}
-          >
-            <Text style={styles.photoButtonText}>
-              {user.avatar_url ? 'Change Photo' : 'Add Photo'}
-            </Text>
-          </TouchableOpacity>
+          />
           {user.avatar_url && (
             <TouchableOpacity
               style={styles.removePhotoButton}
@@ -411,24 +410,21 @@ export default function ProfileScreen() {
             ))}
 
             <View style={styles.editButtons}>
-              <TouchableOpacity
-                style={[styles.button, styles.cancelButton]}
+              <Button
+                label="Cancel"
+                variant="secondary"
                 onPress={handleCancelEdit}
                 disabled={saving}
-              >
-                <Text style={styles.cancelButtonText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.button, styles.saveButton, saving && styles.disabledButton]}
+                style={styles.editButtonFlex}
+              />
+              <Button
+                label="Save"
+                variant="primary"
                 onPress={handleUpdateProfile}
+                loading={saving}
                 disabled={saving}
-              >
-                {saving ? (
-                  <ActivityIndicator color="#fff" />
-                ) : (
-                  <Text style={styles.saveButtonText}>Save</Text>
-                )}
-              </TouchableOpacity>
+                style={styles.editButtonFlex}
+              />
             </View>
           </View>
         ) : (
@@ -494,17 +490,14 @@ export default function ProfileScreen() {
         <InviteFriends />
       </View>
 
-      <TouchableOpacity
-        style={[styles.signOutButton, signingOut && styles.disabledButton]}
+      <Button
+        label="Sign Out"
+        variant="destructive"
         onPress={handleSignOut}
+        loading={signingOut}
         disabled={signingOut}
-      >
-        {signingOut ? (
-          <ActivityIndicator color="#fff" />
-        ) : (
-          <Text style={styles.signOutButtonText}>Sign Out</Text>
-        )}
-      </TouchableOpacity>
+        style={styles.signOutButton}
+      />
     </ScrollView>
   );
 }
@@ -562,17 +555,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 12,
     marginTop: 14,
-  },
-  photoButton: {
-    backgroundColor: '#007AFF',
-    borderRadius: 8,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-  },
-  photoButtonText: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '600',
   },
   removePhotoButton: {
     paddingHorizontal: 8,
@@ -705,42 +687,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 12,
   },
-  button: {
+  editButtonFlex: {
     flex: 1,
-    padding: 12,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  cancelButton: {
-    backgroundColor: '#f0f0f0',
-  },
-  cancelButtonText: {
-    color: '#666',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  saveButton: {
-    backgroundColor: '#007AFF',
-  },
-  disabledButton: {
-    opacity: 0.7,
-  },
-  saveButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
   },
   signOutButton: {
     margin: 20,
-    padding: 16,
-    backgroundColor: '#F44336',
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  signOutButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
   },
 });
 

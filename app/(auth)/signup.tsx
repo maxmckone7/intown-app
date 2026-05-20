@@ -6,12 +6,12 @@ import {
   TouchableOpacity,
   StyleSheet,
   Alert,
-  ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { authService } from '../../services/auth';
+import Button from '../../components/Button';
 
 // Web-compatible alert function
 const showAlert = (title: string, message: string) => {
@@ -124,17 +124,15 @@ export default function SignUpScreen() {
             autoComplete="password"
           />
 
-          <TouchableOpacity
-            style={[styles.button, loading && styles.buttonDisabled]}
+          <Button
+            label="Sign Up"
+            variant="primary"
             onPress={handleSignUp}
+            loading={loading}
             disabled={loading}
-          >
-            {loading ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <Text style={styles.buttonText}>Sign Up</Text>
-            )}
-          </TouchableOpacity>
+            fullWidth
+            style={styles.primaryButton}
+          />
 
           <View style={styles.divider}>
             <View style={styles.dividerLine} />
@@ -142,22 +140,24 @@ export default function SignUpScreen() {
             <View style={styles.dividerLine} />
           </View>
 
-          <TouchableOpacity
-            style={[styles.socialButton, styles.googleButton]}
+          <Button
+            label="Continue with Google"
+            variant="secondary"
             onPress={handleGoogleLogin}
             disabled={loading}
-          >
-            <Text style={styles.socialButtonText}>Continue with Google</Text>
-          </TouchableOpacity>
+            fullWidth
+            style={styles.socialButton}
+          />
 
           {Platform.OS === 'ios' && (
-            <TouchableOpacity
-              style={[styles.socialButton, styles.appleButton]}
+            <Button
+              label="Continue with Apple"
+              variant="secondary"
               onPress={handleAppleLogin}
               disabled={loading}
-            >
-              <Text style={styles.socialButtonText}>Continue with Apple</Text>
-            </TouchableOpacity>
+              fullWidth
+              style={styles.socialButton}
+            />
           )}
 
           <TouchableOpacity
@@ -209,20 +209,8 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     backgroundColor: '#f9f9f9',
   },
-  button: {
-    backgroundColor: '#007AFF',
-    borderRadius: 8,
-    padding: 16,
-    alignItems: 'center',
+  primaryButton: {
     marginTop: 8,
-  },
-  buttonDisabled: {
-    opacity: 0.6,
-  },
-  buttonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
   },
   divider: {
     flexDirection: 'row',
@@ -240,24 +228,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   socialButton: {
-    borderRadius: 8,
-    padding: 16,
-    alignItems: 'center',
     marginBottom: 12,
-    borderWidth: 1,
-  },
-  googleButton: {
-    borderColor: '#ddd',
-    backgroundColor: '#fff',
-  },
-  appleButton: {
-    borderColor: '#000',
-    backgroundColor: '#000',
-  },
-  socialButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
   },
   linkButton: {
     marginTop: 24,
