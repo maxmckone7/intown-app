@@ -19,6 +19,7 @@ import {
   typography,
 } from '../theme';
 import Button from './Button';
+import { useReducedMotion } from '../lib/use-reduced-motion';
 
 type Props = {
   visible: boolean;
@@ -36,9 +37,15 @@ export default function AddFriendModal({ visible, onClose, onSend }: Props) {
   const [email, setEmail] = useState('');
   const opacity = useRef(new Animated.Value(0)).current;
   const translateY = useRef(new Animated.Value(30)).current;
+  const reducedMotion = useReducedMotion();
 
   useEffect(() => {
     if (visible) {
+      if (reducedMotion) {
+        opacity.setValue(1);
+        translateY.setValue(0);
+        return;
+      }
       Animated.parallel([
         Animated.timing(opacity, {
           toValue: 1,
@@ -59,7 +66,7 @@ export default function AddFriendModal({ visible, onClose, onSend }: Props) {
       translateY.setValue(30);
       setEmail('');
     }
-  }, [visible, opacity, translateY]);
+  }, [visible, opacity, translateY, reducedMotion]);
 
   useEffect(() => {
     if (!visible || Platform.OS !== 'web' || typeof document === 'undefined') {

@@ -181,6 +181,9 @@ export default function FriendsCalendar({
         {isEmpty && (
           <View pointerEvents="box-none" style={styles.emptyOverlay}>
             <View style={styles.emptyCard}>
+              <View style={styles.emptyIllustration}>
+                <Text style={styles.emptyIllustrationGlyph}>🏠</Text>
+              </View>
               <Text style={styles.emptyTitle}>
                 Add friends to see the heat map come alive
               </Text>
@@ -344,6 +347,19 @@ const styles = StyleSheet.create({
     maxWidth: 380,
     alignItems: 'center',
     ...shadows.lg,
+  },
+  emptyIllustration: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: colors.background.secondary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing[3],
+  },
+  emptyIllustrationGlyph: {
+    fontSize: 32,
+    lineHeight: 36,
   },
   emptyTitle: {
     fontFamily: fontFamilies.fraunces.medium,
