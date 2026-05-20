@@ -16,6 +16,7 @@ import { friendsService } from '../../services/friends';
 import { FriendWithStatus } from '../../lib/types';
 import Button from '../../components/Button';
 import AddFriendModal from '../../components/AddFriendModal';
+import ManageGroupsModal from '../../components/ManageGroupsModal';
 import {
   colors,
   fontFamilies,
@@ -91,6 +92,7 @@ export default function FriendsScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchFocused, setSearchFocused] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
+  const [groupsOpen, setGroupsOpen] = useState(false);
 
   useEffect(() => {
     loadFriends();
@@ -154,12 +156,20 @@ export default function FriendsScreen() {
             </Text>
           </View>
           {!showEmptyState && (
-            <Button
-              label="Add Friend"
-              variant="primary"
-              onPress={() => setAddOpen(true)}
-              style={styles.addButton}
-            />
+            <View style={styles.headerActions}>
+              <Button
+                label="Groups"
+                variant="secondary"
+                onPress={() => setGroupsOpen(true)}
+                style={styles.headerButton}
+              />
+              <Button
+                label="Add Friend"
+                variant="primary"
+                onPress={() => setAddOpen(true)}
+                style={styles.headerButton}
+              />
+            </View>
           )}
         </View>
 
@@ -232,6 +242,11 @@ export default function FriendsScreen() {
       </View>
 
       <AddFriendModal visible={addOpen} onClose={() => setAddOpen(false)} />
+      <ManageGroupsModal
+        visible={groupsOpen}
+        friends={friends}
+        onClose={() => setGroupsOpen(false)}
+      />
     </View>
   );
 }
@@ -338,7 +353,11 @@ const styles = StyleSheet.create({
     fontSize: typography.body.default.fontSize,
     color: colors.text.secondary,
   },
-  addButton: {
+  headerActions: {
+    flexDirection: 'row',
+    gap: spacing[2],
+  },
+  headerButton: {
     minHeight: 40,
     paddingHorizontal: spacing[4],
   },

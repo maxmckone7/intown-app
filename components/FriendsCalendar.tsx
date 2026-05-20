@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Pressable,
   StyleSheet,
@@ -32,10 +32,13 @@ import {
   HeatmapDayData,
 } from '../lib/heatmap';
 import Button from './Button';
-import GroupFilter, { DEFAULT_GROUPS } from './GroupFilter';
+import GroupFilter from './GroupFilter';
+import ManageGroupsModal from './ManageGroupsModal';
+import { useGroups } from '../lib/groups-store';
+import { FriendWithStatus } from '../lib/types';
 
 type Props = {
-  totalFriends: number;
+  friends: FriendWithStatus[];
   /** Optional override — pass real aggregated data per ISO date once
    *  the Supabase query lands. Mock data is used when undefined. */
   getDayData?: (isoDate: string) => HeatmapDayData;
@@ -47,7 +50,7 @@ const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const ISO = (d: Date) => format(d, 'yyyy-MM-dd');
 
 export default function FriendsCalendar({
-  totalFriends,
+  friends,
   getDayData,
   onDayPress,
   onAddFriendsPress,
@@ -55,6 +58,27 @@ export default function FriendsCalendar({
   const today = startOfToday();
   const [viewMonth, setViewMonth] = useState<Date>(startOfMonth(today));
   const [selectedGroupId, setSelectedGroupId] = useState<string>('all');
+  const [manageOpen, setManageOpen] = useState(false);
+  const storeGroups = useGroups();
+
+  const filterGroups = useMemo(
+    () => [
+      { id: 'all', label: 'All friends' },
+      ...storeGroups.map((g) => ({ id: g.id, label: g.name })),
+    ],
+    [storeGroups]
+  );
+
+  // If the active group disappears (deleted from the manage modal),
+  // fall back to "All friends" so the grid stays in a valid state.
+  useEffect(() => {
+    if (
+      selectedGroupId !== 'all' &&
+      !storeGroups.some((g) => g.id === selectedGroupId)
+    ) {
+      setSelectedGroupId('all');
+    }
+  }, [storeGroups, selectedGroupId]);
 
   const visibleDays = useMemo(() => {
     const gridStart = startOfWeek(startOfMonth(viewMonth), { weekStartsOn: 0 });
@@ -66,6 +90,7 @@ export default function FriendsCalendar({
   const goNext = () => setViewMonth((d) => addMonths(d, 1));
   const goToday = () => setViewMonth(startOfMonth(today));
 
+  const totalFriends = friends.length;
   const isEmpty = totalFriends <= 0;
 
   const handleDayPress = (iso: string) => {
@@ -119,16 +144,10 @@ export default function FriendsCalendar({
 
         <View style={styles.filterRow}>
           <GroupFilter
-            groups={DEFAULT_GROUPS}
+            groups={filterGroups}
             selectedGroupId={selectedGroupId}
             onSelect={setSelectedGroupId}
-            onManagePress={() => {
-              // DES-19 will replace this placeholder with the real
-              // group management UI.
-              if (typeof window !== 'undefined' && window.alert) {
-                window.alert('Group management coming soon (DES-19).');
-              }
-            }}
+            onManagePress={() => setManageOpen(true)}
           />
         </View>
 
@@ -198,6 +217,11 @@ export default function FriendsCalendar({
           </View>
         )}
       </View>
+      <ManageGroupsModal
+        visible={manageOpen}
+        friends={friends}
+        onClose={() => setManageOpen(false)}
+      />
     </View>
   );
 }

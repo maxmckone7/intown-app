@@ -56,7 +56,7 @@ export default function FriendsCalendarScreen() {
         contentContainerStyle={styles.content}
       >
         <FriendsCalendar
-          totalFriends={friends.length}
+          friends={friends}
           onDayPress={(iso) => setSelectedDate(iso)}
           onAddFriendsPress={() => router.push('/(tabs)/friends')}
         />
