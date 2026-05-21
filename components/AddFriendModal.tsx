@@ -102,18 +102,21 @@ export default function AddFriendModal({ visible, onClose, onSend }: Props) {
       onRequestClose={onClose}
       statusBarTranslucent
     >
-      <Pressable
-        style={styles.backdrop}
-        onPress={onClose}
-        accessibilityLabel="Close add-friend modal"
-      >
-        <Animated.View style={[styles.backdropFade, { opacity }]} />
+      <View style={styles.backdrop}>
+        <Pressable
+          style={StyleSheet.absoluteFill}
+          onPress={onClose}
+          accessibilityLabel="Close add-friend modal"
+        />
+        <Animated.View
+          style={[styles.backdropFade, { opacity }]}
+          pointerEvents="none"
+        />
         <Animated.View
           style={[
             styles.card,
             { opacity, transform: [{ translateY }] },
           ]}
-          onStartShouldSetResponder={() => true}
           accessibilityViewIsModal
         >
           <View style={styles.header}>
@@ -166,7 +169,7 @@ export default function AddFriendModal({ visible, onClose, onSend }: Props) {
             />
           </View>
         </Animated.View>
-      </Pressable>
+      </View>
     </Modal>
   );
 }
