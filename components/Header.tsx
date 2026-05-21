@@ -16,7 +16,7 @@ import { colors, fontFamilies, spacing } from '../theme';
 const HEADER_HEIGHT = 72;
 
 const NAV_ITEMS = [
-  { label: 'Friends Calendar', href: '/(tabs)' },
+  { label: "Who's InTown?", href: '/(tabs)' },
   { label: 'My Calendar', href: '/(tabs)/my-calendar' },
   { label: 'Friends', href: '/(tabs)/friends' },
 ] as const;
@@ -72,7 +72,7 @@ export default function Header() {
         <Pressable
           onPress={goHome}
           accessibilityRole="link"
-          accessibilityLabel="InTown — go to Friends Calendar"
+          accessibilityLabel="InTown — go to Who's InTown?"
           hitSlop={8}
           style={({ pressed, hovered }: any) => [
             styles.logoPressable,
