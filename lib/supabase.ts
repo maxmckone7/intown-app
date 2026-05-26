@@ -95,6 +95,67 @@ class MockSupabaseClient {
       return { data: { user, session }, error: null };
     },
 
+    resetPasswordForEmail: async () => {
+      // Mirror Supabase's non-enumerating behavior for local development.
+      return { data: {}, error: null };
+    },
+
+    exchangeCodeForSession: async () => {
+      const users = await this.getStoredData('users') || [];
+      const userData = users[0];
+
+      if (!userData) {
+        return { data: null, error: { message: 'Password reset link is invalid or expired' } };
+      }
+
+      const user = {
+        id: userData.id,
+        email: userData.email,
+        user_metadata: { name: userData.name },
+      };
+
+      const session = {
+        access_token: `mock_token_${userData.id}`,
+        refresh_token: `mock_refresh_${userData.id}`,
+        expires_in: 3600,
+        expires_at: Date.now() + 3600000,
+        token_type: 'bearer',
+        user,
+      };
+      await this.setStoredData('auth_session', session);
+
+      return { data: { user, session }, error: null };
+    },
+
+    updateUser: async ({ password, data }: any) => {
+      const session = await this.getStoredData('auth_session');
+      if (!session?.user) {
+        return { data: null, error: { message: 'You need a valid reset link before updating your password' } };
+      }
+
+      const nextSession = {
+        ...session,
+        user: {
+          ...session.user,
+          user_metadata: {
+            ...session.user.user_metadata,
+            ...data,
+          },
+        },
+      };
+      await this.setStoredData('auth_session', nextSession);
+
+      if (password) {
+        const users = await this.getStoredData('users') || [];
+        const nextUsers = users.map((user: any) =>
+          user.id === session.user.id ? { ...user, password_updated_at: new Date().toISOString() } : user
+        );
+        await this.setStoredData('users', nextUsers);
+      }
+
+      return { data: { user: nextSession.user }, error: null };
+    },
+
     signOut: async () => {
       await this.removeStoredData('auth_session');
       return { error: null };
@@ -534,6 +595,9 @@ if (hasSupabaseConfig) {
         getSession: async () => ({ data: { session: null }, error: null }),
         signUp: async () => ({ data: null, error: { message: 'Not initialized' } }),
         signInWithPassword: async () => ({ data: null, error: { message: 'Not initialized' } }),
+        resetPasswordForEmail: async () => ({ data: null, error: { message: 'Not initialized' } }),
+        exchangeCodeForSession: async () => ({ data: null, error: { message: 'Not initialized' } }),
+        updateUser: async () => ({ data: null, error: { message: 'Not initialized' } }),
         signOut: async () => ({ error: null }),
         getUser: async () => ({ data: { user: null }, error: null }),
         signInWithOAuth: async () => ({ data: null, error: { message: 'Not initialized' } }),
