@@ -45,28 +45,25 @@ type InviteContact = {
 const createInviteLink = () =>
   `https://intown.app/invite/${Math.random().toString(36).slice(2, 11)}`;
 
-const firstContactValue = <T extends { [key: string]: string | undefined }>(
-  values: T[] | undefined,
-  key: keyof T
-) => values?.find((value) => value[key])?.[key];
+const normalizeContacts = (contacts: Contacts.Contact[]): InviteContact[] => {
+  const normalized: InviteContact[] = [];
 
-const normalizeContacts = (contacts: Contacts.Contact[]): InviteContact[] =>
-  contacts
-    .map((contact, index) => {
-      const email = firstContactValue(contact.emails, 'email');
-      const phone = firstContactValue(contact.phoneNumbers, 'number');
+  contacts.forEach((contact, index) => {
+    const email = contact.emails?.find((item) => item.email)?.email;
+    const phone = contact.phoneNumbers?.find((item) => item.number)?.number;
 
-      if (!email && !phone) return null;
+    if (!email && !phone) return;
 
-      return {
-        id: contact.id ?? `${contact.name ?? 'contact'}-${index}`,
-        name: contact.name || email || phone || 'Unnamed contact',
-        email,
-        phone,
-      };
-    })
-    .filter((contact): contact is InviteContact => contact !== null)
-    .slice(0, 25);
+    normalized.push({
+      id: `${contact.name ?? email ?? phone ?? 'contact'}-${index}`,
+      name: contact.name || email || phone || 'Unnamed contact',
+      email,
+      phone,
+    });
+  });
+
+  return normalized.slice(0, 25);
+};
 
 export default function AddFriendModal({ visible, onClose, onSend }: Props) {
   const [email, setEmail] = useState('');

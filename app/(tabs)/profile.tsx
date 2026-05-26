@@ -71,37 +71,6 @@ const getSocialAccountCount = (value?: Record<string, string> | null) =>
 const getAvatarInitial = (profile: User) =>
   profile.name?.charAt(0).toUpperCase() || profile.email.charAt(0).toUpperCase();
 
-const showAlert = (title: string, message: string) => {
-  if (Platform.OS === 'web') {
-    window.alert(`${title}\n\n${message}`);
-  } else {
-    Alert.alert(title, message);
-  }
-const showConfirmation = (
-  title: string,
-  message: string,
-  confirmText: string,
-  onConfirm: () => void | Promise<void>
-) => {
-  if (Platform.OS === 'web' && typeof window !== 'undefined') {
-    if (window.confirm(`${title}\n\n${message}`)) {
-      void onConfirm();
-    }
-    return;
-  }
-
-  Alert.alert(title, message, [
-    { text: 'Cancel', style: 'cancel' },
-    {
-      text: confirmText,
-      style: 'destructive',
-      onPress: () => {
-        void onConfirm();
-      },
-    },
-  ]);
-};
-
 const getImageExtension = (asset: ImagePicker.ImagePickerAsset) => {
   const source = asset.fileName || asset.uri;
   const extension = source.split('.').pop()?.split('?')[0]?.toLowerCase();
@@ -310,54 +279,6 @@ export default function ProfileScreen() {
     }
   };
 
-  const signOut = async () => {
-    try {
-      await authService.signOut();
-      if (Platform.OS === 'web') {
-        router.push('/(auth)/login');
-      } else {
-        router.replace('/(auth)/login');
-      }
-    } catch (error: any) {
-      showAlert('Error', error.message || 'Failed to sign out');
-    }
-  };
-
-  const handleSignOut = () => {
-    if (Platform.OS === 'web') {
-      if (window.confirm('Sign Out\n\nAre you sure you want to sign out?')) {
-        void signOut();
-      }
-      return;
-    }
-
-    Alert.alert(
-      'Sign Out',
-      'Are you sure you want to sign out?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Sign Out',
-          style: 'destructive',
-          onPress: async () => {
-            await signOut();
-          },
-        },
-      ]
-  const handleSignOut = () => {
-    showConfirmation(
-      'Sign Out',
-      'Are you sure you want to sign out?',
-      'Sign Out',
-      async () => {
-        try {
-          await authService.signOut();
-          router.replace('/(auth)/login');
-        } catch (error: any) {
-          Alert.alert('Error', error.message || 'Failed to sign out');
-        }
-      }
-    );
   const handleSignOut = async () => {
     if (signingOut) return;
 
