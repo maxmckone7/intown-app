@@ -36,6 +36,8 @@ import { CalendarStatus } from '../lib/types';
 type DayStatus = 'in_town' | 'away';
 type PersonalStatusMap = Record<string, DayStatus>;
 
+const DEFAULT_DAY_STATUS: DayStatus = 'in_town';
+
 const dayStatusToCalendarStatus = (s: DayStatus): CalendarStatus =>
   s === 'in_town' ? 'in_town' : 'out_of_town';
 
@@ -100,7 +102,7 @@ export default function MyCalendar() {
   const goToday = () => setViewMonth(startOfMonth(today));
 
   const toggleDay = async (iso: string) => {
-    const current = statusByDate[iso] ?? 'away';
+    const current = statusByDate[iso] ?? DEFAULT_DAY_STATUS;
     const next: DayStatus = current === 'in_town' ? 'away' : 'in_town';
 
     // Optimistically flip the cell so the UI feels instant.
@@ -131,7 +133,8 @@ export default function MyCalendar() {
     }
   };
 
-  const statusFor = (iso: string): DayStatus => statusByDate[iso] ?? 'away';
+  const statusFor = (iso: string): DayStatus =>
+    statusByDate[iso] ?? DEFAULT_DAY_STATUS;
 
   return (
     <ScrollView
