@@ -3,6 +3,7 @@ import * as AuthSession from 'expo-auth-session';
 import * as WebBrowser from 'expo-web-browser';
 import { Session, User as SupabaseUser } from '@supabase/supabase-js';
 
+export interface AuthUser extends SupabaseUser {
 WebBrowser.maybeCompleteAuthSession();
 
 export type AuthUser = SupabaseUser & {
