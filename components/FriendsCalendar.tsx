@@ -55,6 +55,7 @@ export default function FriendsCalendar({
   const today = startOfToday();
   const [viewMonth, setViewMonth] = useState<Date>(startOfMonth(today));
   const [selectedGroupId, setSelectedGroupId] = useState<string>('all');
+  const [isEmptyStateDismissed, setIsEmptyStateDismissed] = useState(false);
 
   const visibleDays = useMemo(() => {
     const gridStart = startOfWeek(startOfMonth(viewMonth), { weekStartsOn: 0 });
@@ -178,9 +179,21 @@ export default function FriendsCalendar({
           })}
         </View>
 
-        {isEmpty && (
+        {isEmpty && !isEmptyStateDismissed && (
           <View pointerEvents="box-none" style={styles.emptyOverlay}>
             <View style={styles.emptyCard}>
+              <Pressable
+                onPress={() => setIsEmptyStateDismissed(true)}
+                accessibilityLabel="Dismiss add friends popup"
+                accessibilityRole="button"
+                hitSlop={8}
+                style={({ pressed, hovered }: any) => [
+                  styles.emptyCloseButton,
+                  (pressed || hovered) && styles.emptyCloseButtonHover,
+                ]}
+              >
+                <Text style={styles.emptyCloseGlyph}>×</Text>
+              </Pressable>
               <View style={styles.emptyIllustration}>
                 <Text style={styles.emptyIllustrationGlyph}>🏠</Text>
               </View>
@@ -346,7 +359,27 @@ const styles = StyleSheet.create({
     padding: spacing[5],
     maxWidth: 380,
     alignItems: 'center',
+    position: 'relative',
     ...shadows.lg,
+  },
+  emptyCloseButton: {
+    position: 'absolute',
+    top: spacing[3],
+    right: spacing[3],
+    width: 32,
+    height: 32,
+    borderRadius: radius.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyCloseButtonHover: {
+    backgroundColor: colors.background.secondary,
+  },
+  emptyCloseGlyph: {
+    fontSize: 24,
+    lineHeight: 24,
+    color: colors.text.secondary,
+    fontWeight: '500',
   },
   emptyIllustration: {
     width: 72,
