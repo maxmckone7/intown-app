@@ -95,6 +95,10 @@ class MockSupabaseClient {
       return { data: { user, session }, error: null };
     },
 
+    resetPasswordForEmail: async () => {
+      return { data: {}, error: null };
+    },
+
     signOut: async () => {
       await this.removeStoredData('auth_session');
       return { error: null };
@@ -496,6 +500,7 @@ if (hasSupabaseConfig) {
         getSession: async () => ({ data: { session: null }, error: null }),
         signUp: async () => ({ data: null, error: { message: 'Not initialized' } }),
         signInWithPassword: async () => ({ data: null, error: { message: 'Not initialized' } }),
+        resetPasswordForEmail: async () => ({ data: null, error: { message: 'Not initialized' } }),
         signOut: async () => ({ error: null }),
         getUser: async () => ({ data: { user: null }, error: null }),
         signInWithOAuth: async () => ({ data: null, error: { message: 'Not initialized' } }),
