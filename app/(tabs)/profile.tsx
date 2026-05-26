@@ -518,7 +518,8 @@ const styles = StyleSheet.create({
   },
   header: {
     alignItems: 'center',
-    padding: 32,
+    paddingHorizontal: 16,
+    paddingVertical: 32,
     borderBottomWidth: 1,
     borderBottomColor: colors.border.subtle,
   },
@@ -567,7 +568,8 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   section: {
-    padding: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 24,
     borderBottomWidth: 1,
     borderBottomColor: colors.border.subtle,
   },
@@ -694,6 +696,17 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   signOutButton: {
+    marginHorizontal: 16,
+    marginVertical: 24,
+    padding: 16,
+    backgroundColor: '#F44336',
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  signOutButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
     margin: 20,
   },
 });

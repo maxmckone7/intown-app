@@ -171,6 +171,99 @@ export default function FriendsScreen() {
           )}
         </View>
 
+      {activeTab === 'calendar' && (
+        <View style={styles.content}>
+          <View style={styles.calendarWrapper}>
+            <Calendar
+            markedDates={friendsCalendarEntries}
+          <Calendar
+            onDayPress={handleFriendsDatePress}
+            markedDates={{
+              ...friendsCalendarEntries,
+              ...(selectedFriendsDate && {
+                [selectedFriendsDate]: {
+                  ...selectedDateMark,
+                  customStyles: {
+                    ...selectedDateMark?.customStyles,
+                    container: {
+                      ...selectedDateMark?.customStyles?.container,
+                      borderWidth: 2,
+                      borderColor: '#007AFF',
+                      backgroundColor:
+                        selectedDateMark?.customStyles?.container?.backgroundColor || '#EAF3FF',
+                      borderRadius: 8,
+                    },
+                    text: {
+                      ...selectedDateMark?.customStyles?.text,
+                      color: selectedDateMark?.customStyles?.text?.color || '#007AFF',
+                      fontWeight: '700',
+                    },
+                  },
+                },
+              }),
+            }}
+            markingType="custom"
+            theme={{
+              todayTextColor: '#007AFF',
+              selectedDayBackgroundColor: '#007AFF',
+              arrowColor: '#333',
+              monthTextColor: '#333',
+              textDayFontWeight: '400',
+              textMonthFontWeight: '600',
+              textDayHeaderFontWeight: '600',
+              calendarBackground: '#fff',
+              textSectionTitleColor: '#666',
+              textDisabledColor: '#d9e1e8',
+            }}
+          />
+          <View style={styles.dateSummary}>
+            {friends.length === 0 ? (
+              <>
+                <Text style={styles.dateSummaryTitle}>No friends yet</Text>
+                <Text style={styles.dateSummaryText}>
+                  Add friends from Search to see their availability by date.
+                </Text>
+              </>
+            ) : selectedFriendsDate ? (
+              <>
+                <Text style={styles.dateSummaryTitle}>
+                  {formatCalendarDate(selectedFriendsDate)}
+                </Text>
+                {selectedFriendAvailability.map(({ friend, status }) => (
+                  <View key={friend.id} style={styles.availabilityRow}>
+                    <Text style={styles.availabilityName}>{getFriendName(friend)}</Text>
+                    <Text
+                      style={[
+                        styles.availabilityStatus,
+                        status === 'in_town'
+                          ? styles.availabilityInTown
+                          : styles.availabilityOutOfTown,
+                      ]}
+                    >
+                      {status === 'in_town' ? 'In town' : 'Out of town'}
+                    </Text>
+                  </View>
+                ))}
+              </>
+            ) : (
+              <>
+                <Text style={styles.dateSummaryTitle}>Friend availability</Text>
+                <Text style={styles.dateSummaryText}>
+                  Tap any date to see which friends are in town or out of town.
+                </Text>
+              </>
+            )}
+          </View>
+          {/* Invite Friends Section */}
+          <View style={styles.inviteSection}>
+            <InviteFriends />
+          </View>
+        </View>
+      )}
+
+      {activeTab === 'search' && (
+        <View style={styles.content}>
+          <View style={styles.searchContainer}>
         {!showEmptyState && (
           <View
             style={[
@@ -443,6 +536,27 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     letterSpacing: typography.label.letterSpacing,
   },
+  searchContainer: {
+    flexDirection: 'row',
+    paddingHorizontal: 16,
+    paddingTop: 24,
+    paddingBottom: 16,
+    gap: 12,
+  },
+  searchInput: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 16,
+    backgroundColor: '#f9f9f9',
+  },
+  searchButton: {
+    backgroundColor: '#007AFF',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 8,
   messageButton: {
     width: 36,
     height: 36,
@@ -497,6 +611,52 @@ const styles = StyleSheet.create({
     paddingVertical: spacing[5],
     alignItems: 'center',
   },
+  dateSummaryText: {
+    color: '#666',
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  availabilityRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#E1EDFF',
+  },
+  availabilityName: {
+    color: '#333',
+    flex: 1,
+    fontSize: 15,
+    fontWeight: '600',
+    marginRight: 12,
+  },
+  availabilityStatus: {
+    borderRadius: 999,
+    fontSize: 13,
+    fontWeight: '700',
+    overflow: 'hidden',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  availabilityInTown: {
+    backgroundColor: '#E8F5E9',
+    color: '#2E7D32',
+  },
+  availabilityOutOfTown: {
+    backgroundColor: '#FFEBEE',
+    color: '#C62828',
+  },
+  inviteSection: {
+    paddingTop: 24,
+    paddingHorizontal: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#eee',
+    marginTop: 24,
+  },
+  calendarWrapper: {
+    paddingHorizontal: 16,
+    paddingTop: 24,
   noMatchText: {
     fontFamily: fontFamilies.inter.regular,
     fontSize: typography.body.default.fontSize,
