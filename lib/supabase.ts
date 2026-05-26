@@ -119,12 +119,50 @@ class MockSupabaseClient {
     },
 
     signInWithOAuth: async ({ provider }: any) => {
-      return {
-        data: null,
-        error: {
-          message: `${provider} sign-in requires Supabase environment variables. Add EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY to enable OAuth.`,
+      const providerLabel = provider === 'google' ? 'Google' : provider === 'apple' ? 'Apple' : provider;
+      const email = `dev-${provider}@intown.local`;
+      const name = `Dev ${providerLabel} User`;
+
+      const users = (await this.getStoredData('users')) || [];
+      let userRecord = users.find((u: any) => u.email === email);
+      if (!userRecord) {
+        userRecord = {
+          id: `oauth_${provider}_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`,
+          email,
+          name,
+          avatar_url: null,
+          location: null,
+          interests: [],
+          social_accounts: { [provider]: true },
+          created_at: new Date().toISOString(),
+        };
+        users.push(userRecord);
+        await this.setStoredData('users', users);
+      }
+
+      const user = {
+        id: userRecord.id,
+        email,
+        user_metadata: {
+          name,
+          full_name: name,
+          avatar_url: null,
+          picture: null,
+          provider,
         },
       };
+
+      const session = {
+        access_token: `mock_token_${userRecord.id}`,
+        refresh_token: `mock_refresh_${userRecord.id}`,
+        expires_in: 3600,
+        expires_at: Date.now() + 3600000,
+        token_type: 'bearer',
+        user,
+      };
+      await this.setStoredData('auth_session', session);
+
+      return { data: { provider, mocked: true, user, session }, error: null };
     },
 
     onAuthStateChange: (callback: any) => {
@@ -509,3 +547,4 @@ if (hasSupabaseConfig) {
 }
 
 export const supabase = supabaseInstance;
+export const isMockSupabase = !hasSupabaseConfig;
