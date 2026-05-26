@@ -45,21 +45,27 @@ type InviteContact = {
 const createInviteLink = () =>
   `https://intown.app/invite/${Math.random().toString(36).slice(2, 11)}`;
 
-const firstContactValue = <T extends { [key: string]: string | undefined }>(
+const firstContactValue = <T extends Record<string, unknown>>(
   values: T[] | undefined,
   key: keyof T
-) => values?.find((value) => value[key])?.[key];
+) => {
+  const value = values?.find((item) => typeof item[key] === 'string' && item[key])?.[key];
+  return typeof value === 'string' ? value : undefined;
+};
 
 const normalizeContacts = (contacts: Contacts.Contact[]): InviteContact[] =>
   contacts
-    .map((contact, index) => {
+    .map((contact, index): InviteContact | null => {
       const email = firstContactValue(contact.emails, 'email');
       const phone = firstContactValue(contact.phoneNumbers, 'number');
+      const id = 'id' in contact && typeof contact.id === 'string'
+        ? contact.id
+        : `${contact.name ?? 'contact'}-${index}`;
 
       if (!email && !phone) return null;
 
       return {
-        id: contact.id ?? `${contact.name ?? 'contact'}-${index}`,
+        id,
         name: contact.name || email || phone || 'Unnamed contact',
         email,
         phone,
