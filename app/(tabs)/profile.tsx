@@ -71,6 +71,12 @@ const getSocialAccountCount = (value?: Record<string, string> | null) =>
 const getAvatarInitial = (profile: User) =>
   profile.name?.charAt(0).toUpperCase() || profile.email.charAt(0).toUpperCase();
 
+const showAlert = (title: string, message: string) => {
+  if (Platform.OS === 'web') {
+    window.alert(`${title}\n\n${message}`);
+  } else {
+    Alert.alert(title, message);
+  }
 const showConfirmation = (
   title: string,
   message: string,
@@ -304,6 +310,40 @@ export default function ProfileScreen() {
     }
   };
 
+  const signOut = async () => {
+    try {
+      await authService.signOut();
+      if (Platform.OS === 'web') {
+        router.push('/(auth)/login');
+      } else {
+        router.replace('/(auth)/login');
+      }
+    } catch (error: any) {
+      showAlert('Error', error.message || 'Failed to sign out');
+    }
+  };
+
+  const handleSignOut = () => {
+    if (Platform.OS === 'web') {
+      if (window.confirm('Sign Out\n\nAre you sure you want to sign out?')) {
+        void signOut();
+      }
+      return;
+    }
+
+    Alert.alert(
+      'Sign Out',
+      'Are you sure you want to sign out?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Sign Out',
+          style: 'destructive',
+          onPress: async () => {
+            await signOut();
+          },
+        },
+      ]
   const handleSignOut = () => {
     showConfirmation(
       'Sign Out',
