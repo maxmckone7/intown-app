@@ -337,10 +337,15 @@ class MockQueryBuilder {
 
     if (mutation.type === 'upsert') {
       const values = Array.isArray(mutation.values) ? mutation.values : [mutation.values];
-      const conflictField = mutation.options?.onConflict || 'id';
+      const conflictFields = (mutation.options?.onConflict || 'id')
+        .split(',')
+        .map((field) => field.trim())
+        .filter(Boolean);
       const now = new Date().toISOString();
       const upserted = values.map((value) => {
-        const index = data.findIndex((item: any) => item[conflictField] === value[conflictField]);
+        const index = data.findIndex((item: any) =>
+          conflictFields.every((field) => item[field] === value[field])
+        );
 
         if (index === -1) {
           const newItem = this.createRow(value);
