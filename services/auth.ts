@@ -1,4 +1,4 @@
-import { supabase } from '../lib/supabase';
+import { supabase, isMockSupabase } from '../lib/supabase';
 import * as AuthSession from 'expo-auth-session';
 import * as WebBrowser from 'expo-web-browser';
 import { Session, User as SupabaseUser } from '@supabase/supabase-js';
@@ -15,11 +15,19 @@ export type AuthUser = SupabaseUser & {
 };
 
 const OAUTH_REDIRECT_PATH = 'auth/callback';
+const PASSWORD_RESET_REDIRECT_PATH = 'auth/reset-password';
 
 const getOAuthRedirectUrl = () =>
   AuthSession.makeRedirectUri({
     scheme: 'intown',
     path: OAUTH_REDIRECT_PATH,
+    isTripleSlashed: true,
+  });
+
+const getPasswordResetRedirectUrl = () =>
+  AuthSession.makeRedirectUri({
+    scheme: 'intown',
+    path: PASSWORD_RESET_REDIRECT_PATH,
     isTripleSlashed: true,
   });
 
@@ -61,6 +69,14 @@ const completeOAuthSignIn = async (provider: 'google' | 'apple') => {
   });
 
   if (error) throw error;
+
+  // Without real Supabase credentials the mock client signs the user in inline
+  // and returns the session directly, bypassing the browser-based OAuth flow.
+  if (isMockSupabase && data?.mocked) {
+    await ensureUserProfile(data.user);
+    return { user: data.user, session: data.session };
+  }
+
   if (!data?.url) {
     throw new Error(`${provider} sign-in did not return an OAuth URL.`);
   }
@@ -137,6 +153,25 @@ export const authService = {
   async requestPasswordReset(email: string) {
     const { error } = await supabase.auth.resetPasswordForEmail(email);
     if (error) throw error;
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: getPasswordResetRedirectUrl(),
+    });
+
+    if (error) throw error;
+  },
+
+  async exchangePasswordResetCode(code: string) {
+    const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+
+    if (error) throw error;
+    return data;
+  },
+
+  async updatePassword(password: string) {
+    const { data, error } = await supabase.auth.updateUser({ password });
+
+    if (error) throw error;
+    return data;
   },
 
   async signOut() {

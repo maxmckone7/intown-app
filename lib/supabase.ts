@@ -99,6 +99,66 @@ class MockSupabaseClient {
       return { data: {}, error: null };
     },
 
+      // Mirror Supabase's non-enumerating behavior for local development.
+      return { data: {}, error: null };
+    },
+
+    exchangeCodeForSession: async () => {
+      const users = await this.getStoredData('users') || [];
+      const userData = users[0];
+
+      if (!userData) {
+        return { data: null, error: { message: 'Password reset link is invalid or expired' } };
+      }
+
+      const user = {
+        id: userData.id,
+        email: userData.email,
+        user_metadata: { name: userData.name },
+      };
+
+      const session = {
+        access_token: `mock_token_${userData.id}`,
+        refresh_token: `mock_refresh_${userData.id}`,
+        expires_in: 3600,
+        expires_at: Date.now() + 3600000,
+        token_type: 'bearer',
+        user,
+      };
+      await this.setStoredData('auth_session', session);
+
+      return { data: { user, session }, error: null };
+    },
+
+    updateUser: async ({ password, data }: any) => {
+      const session = await this.getStoredData('auth_session');
+      if (!session?.user) {
+        return { data: null, error: { message: 'You need a valid reset link before updating your password' } };
+      }
+
+      const nextSession = {
+        ...session,
+        user: {
+          ...session.user,
+          user_metadata: {
+            ...session.user.user_metadata,
+            ...data,
+          },
+        },
+      };
+      await this.setStoredData('auth_session', nextSession);
+
+      if (password) {
+        const users = await this.getStoredData('users') || [];
+        const nextUsers = users.map((user: any) =>
+          user.id === session.user.id ? { ...user, password_updated_at: new Date().toISOString() } : user
+        );
+        await this.setStoredData('users', nextUsers);
+      }
+
+      return { data: { user: nextSession.user }, error: null };
+    },
+
     signOut: async () => {
       await this.removeStoredData('auth_session');
       return { error: null };
@@ -123,12 +183,50 @@ class MockSupabaseClient {
     },
 
     signInWithOAuth: async ({ provider }: any) => {
-      return {
-        data: null,
-        error: {
-          message: `${provider} sign-in requires Supabase environment variables. Add EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY to enable OAuth.`,
+      const providerLabel = provider === 'google' ? 'Google' : provider === 'apple' ? 'Apple' : provider;
+      const email = `dev-${provider}@intown.local`;
+      const name = `Dev ${providerLabel} User`;
+
+      const users = (await this.getStoredData('users')) || [];
+      let userRecord = users.find((u: any) => u.email === email);
+      if (!userRecord) {
+        userRecord = {
+          id: `oauth_${provider}_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`,
+          email,
+          name,
+          avatar_url: null,
+          location: null,
+          interests: [],
+          social_accounts: { [provider]: true },
+          created_at: new Date().toISOString(),
+        };
+        users.push(userRecord);
+        await this.setStoredData('users', users);
+      }
+
+      const user = {
+        id: userRecord.id,
+        email,
+        user_metadata: {
+          name,
+          full_name: name,
+          avatar_url: null,
+          picture: null,
+          provider,
         },
       };
+
+      const session = {
+        access_token: `mock_token_${userRecord.id}`,
+        refresh_token: `mock_refresh_${userRecord.id}`,
+        expires_in: 3600,
+        expires_at: Date.now() + 3600000,
+        token_type: 'bearer',
+        user,
+      };
+      await this.setStoredData('auth_session', session);
+
+      return { data: { provider, mocked: true, user, session }, error: null };
     },
 
     onAuthStateChange: (callback: any) => {
@@ -501,6 +599,8 @@ if (hasSupabaseConfig) {
         signUp: async () => ({ data: null, error: { message: 'Not initialized' } }),
         signInWithPassword: async () => ({ data: null, error: { message: 'Not initialized' } }),
         resetPasswordForEmail: async () => ({ data: null, error: { message: 'Not initialized' } }),
+        exchangeCodeForSession: async () => ({ data: null, error: { message: 'Not initialized' } }),
+        updateUser: async () => ({ data: null, error: { message: 'Not initialized' } }),
         signOut: async () => ({ error: null }),
         getUser: async () => ({ data: { user: null }, error: null }),
         signInWithOAuth: async () => ({ data: null, error: { message: 'Not initialized' } }),
@@ -514,3 +614,4 @@ if (hasSupabaseConfig) {
 }
 
 export const supabase = supabaseInstance;
+export const isMockSupabase = !hasSupabaseConfig;
