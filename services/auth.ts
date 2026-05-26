@@ -15,11 +15,19 @@ export type AuthUser = SupabaseUser & {
 };
 
 const OAUTH_REDIRECT_PATH = 'auth/callback';
+const PASSWORD_RESET_REDIRECT_PATH = 'auth/reset-password';
 
 const getOAuthRedirectUrl = () =>
   AuthSession.makeRedirectUri({
     scheme: 'intown',
     path: OAUTH_REDIRECT_PATH,
+    isTripleSlashed: true,
+  });
+
+const getPasswordResetRedirectUrl = () =>
+  AuthSession.makeRedirectUri({
+    scheme: 'intown',
+    path: PASSWORD_RESET_REDIRECT_PATH,
     isTripleSlashed: true,
   });
 
@@ -139,6 +147,28 @@ export const authService = {
     if (!data || !data.user) {
       throw new Error('Invalid login credentials');
     }
+    return data;
+  },
+
+  async requestPasswordReset(email: string) {
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: getPasswordResetRedirectUrl(),
+    });
+
+    if (error) throw error;
+  },
+
+  async exchangePasswordResetCode(code: string) {
+    const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+
+    if (error) throw error;
+    return data;
+  },
+
+  async updatePassword(password: string) {
+    const { data, error } = await supabase.auth.updateUser({ password });
+
+    if (error) throw error;
     return data;
   },
 
