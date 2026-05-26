@@ -9,29 +9,7 @@ import {
   Platform,
   Linking,
 } from 'react-native';
-
-// Simple clipboard implementation for web/mobile
-const Clipboard = {
-  setStringAsync: async (text: string) => {
-    if (Platform.OS === 'web') {
-      try {
-        await navigator.clipboard.writeText(text);
-      } catch (error) {
-        // Fallback for older browsers
-        const textArea = document.createElement('textarea');
-        textArea.value = text;
-        document.body.appendChild(textArea);
-        textArea.select();
-        document.execCommand('copy');
-        document.body.removeChild(textArea);
-      }
-    } else {
-      // For React Native, you'd use @react-native-clipboard/clipboard
-      // This is a mock for now
-      console.log('Copy to clipboard:', text);
-    }
-  },
-};
+import * as Clipboard from 'expo-clipboard';
 
 type InviteFriendsProps = {
   variant?: 'card' | 'compact';
