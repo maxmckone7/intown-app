@@ -452,6 +452,22 @@ export default function FriendsScreen() {
       </View>
   const showEmptyState = friends.length === 0;
 
+      {activeTab === 'list' && (
+        <View style={styles.content}>
+          {friends.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyStateText}>No friends yet</Text>
+              <Text style={styles.emptyStateSubtext}>
+                Search for users or invite people to join InTown
+              </Text>
+              <InviteFriends variant="compact" />
+            </View>
+          ) : (
+            <FlatList
+              data={friends}
+              renderItem={renderFriendItem}
+              keyExtractor={(item) => item.id}
+              contentContainerStyle={styles.list}
   return (
     <View style={styles.outer}>
       <View style={styles.inner}>
