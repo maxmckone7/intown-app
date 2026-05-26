@@ -30,7 +30,7 @@ type FriendStatusState = 'in_town' | 'away' | 'returning_soon';
 type FriendStatus = {
   state: FriendStatusState;
   label: string; // e.g. "In town until June 3rd"
-  pillLabel: string; // e.g. "In town"
+  pillLabel: string; // e.g. "In Town"
 };
 
 const STATUS_TEXTS: Record<FriendStatusState, string[]> = {
@@ -55,7 +55,7 @@ const STATUS_TEXTS: Record<FriendStatusState, string[]> = {
 };
 
 const PILL_LABELS: Record<FriendStatusState, string> = {
-  in_town: 'In town',
+  in_town: 'In Town',
   away: 'Away',
   returning_soon: 'Returning soon',
 };

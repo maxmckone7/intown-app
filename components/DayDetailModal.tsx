@@ -198,7 +198,7 @@ export default function DayDetailModal({
               showsVerticalScrollIndicator={false}
             >
               <View style={styles.sectionLabelRow}>
-                <Text style={styles.sectionLabel}>In town</Text>
+                <Text style={styles.sectionLabel}>In Town</Text>
                 <View style={styles.sectionDivider} />
               </View>
               {inTownFriends.map(({ friend, status }) => {

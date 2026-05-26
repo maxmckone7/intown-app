@@ -230,7 +230,7 @@ export default function MyCalendar() {
             const bg =
               status === 'in_town' ? colors.heatmap.high : colors.heatmap.low;
             const dayNumber = format(date, 'd');
-            const statusLabel = status === 'in_town' ? 'In town' : 'Away';
+            const statusLabel = status === 'in_town' ? 'In Town' : 'Away';
 
             return (
               <Pressable
