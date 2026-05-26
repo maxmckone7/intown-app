@@ -1,59 +1,163 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  FlatList,
-  TextInput,
-  TouchableOpacity,
   ActivityIndicator,
   Alert,
+  Platform,
 } from 'react-native';
 import { Calendar, DateData } from 'react-native-calendars';
 import { authService } from '../../services/auth';
 import { friendsService } from '../../services/friends';
 import { calendarService } from '../../services/calendar';
-import { CalendarEntry, CalendarStatus, User, FriendWithStatus } from '../../lib/types';
+import { CalendarEntry, User, FriendWithStatus } from '../../lib/types';
 import InviteFriends from '../../components/InviteFriends';
+  FlatList,
+  Image,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
+import { Feather } from '@expo/vector-icons';
+import { authService } from '../../services/auth';
+import { friendsService } from '../../services/friends';
+import { FriendWithStatus } from '../../lib/types';
+import Button from '../../components/Button';
+import AddFriendModal from '../../components/AddFriendModal';
+import { FriendsListSkeleton } from '../../components/Skeleton';
+import {
+  colors,
+  fontFamilies,
+  radius,
+  spacing,
+  typography,
+} from '../../theme';
 
-type FriendCalendarEntry = CalendarEntry & {
-  friend_name: string;
-  friend_id: string;
+type FriendStatusState = 'in_town' | 'away' | 'returning_soon';
+
+type FriendStatus = {
+  state: FriendStatusState;
+  label: string; // e.g. "In town until June 3rd"
+  pillLabel: string; // e.g. "In town"
+};
+
+const STATUS_TEXTS: Record<FriendStatusState, string[]> = {
+  in_town: [
+    'In town until June 3rd',
+    'Around all week',
+    'Available all weekend',
+    'Free Friday night',
+  ],
+  away: [
+    'Away through next week',
+    'Out of town until Sunday',
+    'Traveling this weekend',
+    'Back next Friday',
+  ],
+  returning_soon: [
+    'Returning Wednesday',
+    'Back this weekend',
+    'In town Thursday',
+    'Home by Friday',
+  ],
+};
+
+const PILL_LABELS: Record<FriendStatusState, string> = {
+  in_town: 'In town',
+  away: 'Away',
+  returning_soon: 'Returning soon',
+};
+
+// Deterministic FNV-style hash so the same friend keeps the same status
+// between renders. TODO: replace with real availability aggregated from
+// Supabase calendar entries.
+function hash(seed: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < seed.length; i += 1) {
+    h ^= seed.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return (h >>> 0) % 10000;
+}
+
+function mockStatusFor(friendId: string): FriendStatus {
+  const states: FriendStatusState[] = ['in_town', 'away', 'returning_soon'];
+  const state = states[hash(`state|${friendId}`) % states.length];
+  const pool = STATUS_TEXTS[state];
+  const label = pool[hash(`label|${friendId}`) % pool.length];
+  return { state, label, pillLabel: PILL_LABELS[state] };
+}
+
+const STATUS_COLORS: Record<FriendStatusState, { text: string; bg: string }> = {
+  in_town: { text: '#4D6A50', bg: 'rgba(134, 167, 137, 0.2)' },
+  away: { text: '#8A3B32', bg: 'rgba(196, 90, 77, 0.18)' },
+  returning_soon: { text: '#7A5A0F', bg: 'rgba(232, 197, 71, 0.25)' },
+};
+
+type FriendCalendarEntry = CalendarEntry & { friend_name: string; friend_id: string };
+
+const showConfirmation = (
+  title: string,
+  message: string,
+  confirmText: string,
+  onConfirm: () => void | Promise<void>
+) => {
+  if (Platform.OS === 'web' && typeof window !== 'undefined') {
+    if (window.confirm(`${title}\n\n${message}`)) {
+      void onConfirm();
+    }
+    return;
+  }
+
+  Alert.alert(title, message, [
+    { text: 'Cancel', style: 'cancel' },
+    {
+      text: confirmText,
+      style: 'destructive',
+      onPress: () => {
+        void onConfirm();
+      },
+    },
+  ]);
 };
 
 export default function FriendsScreen() {
-  // Default to calendar view (heatmap) as specified
-  const [activeTab, setActiveTab] = useState<'list' | 'calendar' | 'search'>('calendar');
   const [friends, setFriends] = useState<FriendWithStatus[]>([]);
-  const [searchResults, setSearchResults] = useState<User[]>([]);
-  const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [searching, setSearching] = useState(false);
   const [friendsCalendarEntries, setFriendsCalendarEntries] = useState<Record<string, any>>({});
-  const [friendsEntriesByDate, setFriendsEntriesByDate] = useState<Record<string, FriendCalendarEntry[]>>({});
-  const [selectedFriendsDate, setSelectedFriendsDate] = useState<string | null>(null);
+  const [friendAvailabilityEntries, setFriendAvailabilityEntries] = useState<FriendCalendarEntry[]>([]);
+  const [selectedFriendDate, setSelectedFriendDate] = useState<string | null>(null);
+  const [hasSearched, setHasSearched] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchFocused, setSearchFocused] = useState(false);
+  const [addOpen, setAddOpen] = useState(false);
 
   useEffect(() => {
-    loadUserAndFriends();
+    loadFriends();
   }, []);
 
   useEffect(() => {
     if (activeTab === 'calendar' && friends.length > 0) {
       loadFriendsCalendar();
+    } else if (activeTab === 'calendar') {
+      setFriendsCalendarEntries({});
+      setFriendAvailabilityEntries([]);
+      setSelectedFriendDate(null);
     }
   }, [activeTab, friends]);
 
   const loadUserAndFriends = async () => {
+  const loadFriends = async () => {
     try {
       const user = await authService.getCurrentUser();
       if (!user) {
         Alert.alert('Error', 'Not authenticated');
         return;
       }
-
-      setUserId(user.id);
-      await loadFriends(user.id);
+      const list = await friendsService.getFriends(user.id);
+      setFriends(list);
     } catch (error: any) {
       Alert.alert('Error', error.message || 'Failed to load friends');
     } finally {
@@ -76,30 +180,25 @@ export default function FriendsScreen() {
     try {
       const entries = await calendarService.getFriendsEntries(userId);
       const markedDates: Record<string, any> = {};
-      const availabilityByDate: Record<string, FriendCalendarEntry[]> = {};
+      setFriendAvailabilityEntries(entries);
 
       // Group entries by date
-      const countsByDate: Record<string, { inTown: number; outOfTown: number }> = {};
+      const entriesByDate: Record<string, { inTown: number; outOfTown: number }> = {};
       
-      entries.forEach((entry) => {
-        if (!availabilityByDate[entry.date]) {
-          availabilityByDate[entry.date] = [];
-        }
-        availabilityByDate[entry.date].push(entry);
-
-        if (!countsByDate[entry.date]) {
-          countsByDate[entry.date] = { inTown: 0, outOfTown: 0 };
+      entries.forEach((entry: any) => {
+        if (!entriesByDate[entry.date]) {
+          entriesByDate[entry.date] = { inTown: 0, outOfTown: 0 };
         }
         if (entry.status === 'in_town') {
-          countsByDate[entry.date].inTown++;
+          entriesByDate[entry.date].inTown++;
         } else {
-          countsByDate[entry.date].outOfTown++;
+          entriesByDate[entry.date].outOfTown++;
         }
       });
 
       // Calculate heat map colors based on friend availability
-      Object.keys(countsByDate).forEach((date) => {
-        const { inTown, outOfTown } = countsByDate[date];
+      Object.keys(entriesByDate).forEach((date) => {
+        const { inTown, outOfTown } = entriesByDate[date];
         const total = inTown + outOfTown;
         
         if (total === 0) {
@@ -156,19 +255,29 @@ export default function FriendsScreen() {
       });
 
       setFriendsCalendarEntries(markedDates);
-      setFriendsEntriesByDate(availabilityByDate);
     } catch (error: any) {
       Alert.alert('Error', error.message || 'Failed to load friends calendar');
     }
   };
 
   const handleSearch = async () => {
-    if (!searchQuery.trim() || !userId) return;
+    const query = searchQuery.trim();
+
+    if (!query) {
+      Alert.alert('Search', 'Enter a name or email to search.');
+      return;
+    }
+
+    if (!userId) {
+      Alert.alert('Error', 'Not authenticated');
+      return;
+    }
 
     setSearching(true);
     try {
-      const results = await friendsService.searchUsers(searchQuery, userId);
+      const results = await friendsService.searchUsers(query, userId);
       setSearchResults(results);
+      setHasSearched(true);
     } catch (error: any) {
       Alert.alert('Error', error.message || 'Failed to search users');
     } finally {
@@ -178,8 +287,10 @@ export default function FriendsScreen() {
 
   const handleSearchQueryChange = (value: string) => {
     setSearchQuery(value);
+
     if (!value.trim()) {
       setSearchResults([]);
+      setHasSearched(false);
     }
   };
 
@@ -193,6 +304,7 @@ export default function FriendsScreen() {
       setActiveTab('list');
       setSearchQuery('');
       setSearchResults([]);
+      setHasSearched(false);
     } catch (error: any) {
       Alert.alert('Error', error.message || 'Failed to follow user');
     }
@@ -201,51 +313,24 @@ export default function FriendsScreen() {
   const handleUnfollow = async (friendId: string) => {
     if (!userId) return;
 
-    Alert.alert(
+    showConfirmation(
       'Unfollow',
       'Are you sure you want to unfollow this friend?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Unfollow',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await friendsService.unfollowUser(userId, friendId);
-              await loadFriends(userId);
-            } catch (error: any) {
-              Alert.alert('Error', error.message || 'Failed to unfollow');
-            }
-          },
-        },
-      ]
+      'Unfollow',
+      async () => {
+        try {
+          await friendsService.unfollowUser(userId, friendId);
+          await loadFriends(userId);
+        } catch (error: any) {
+          Alert.alert('Error', error.message || 'Failed to unfollow');
+        }
+      }
     );
   };
 
-  const handleFriendsDatePress = (day: DateData) => {
-    setSelectedFriendsDate(day.dateString);
+  const handleFriendsCalendarDatePress = (day: DateData) => {
+    setSelectedFriendDate(day.dateString);
   };
-
-  const getFriendAvailabilityForDate = (date: string) =>
-    friends.map((friend) => {
-      const explicitEntry = friendsEntriesByDate[date]?.find(
-        (entry) => entry.friend_id === friend.id
-      );
-
-      return {
-        friend,
-        status: (explicitEntry?.status || 'in_town') as CalendarStatus,
-      };
-    });
-
-  const formatCalendarDate = (date: string) =>
-    new Date(`${date}T00:00:00`).toLocaleDateString('en-US', {
-      weekday: 'short',
-      month: 'short',
-      day: 'numeric',
-    });
-
-  const getFriendName = (friend: FriendWithStatus) => friend.name || friend.email;
 
   const renderFriendItem = ({ item }: { item: FriendWithStatus }) => (
     <View style={styles.friendItem}>
@@ -267,53 +352,75 @@ export default function FriendsScreen() {
         <Text style={styles.unfollowButtonText}>Unfollow</Text>
       </TouchableOpacity>
     </View>
+  const friendsWithStatus = useMemo(
+    () => friends.map((f) => ({ friend: f, status: mockStatusFor(f.id) })),
+    [friends]
   );
 
-  const renderSearchResult = ({ item }: { item: User }) => {
-    const isFollowing = friends.some((f) => f.id === item.id);
+  const inTownThisWeek = useMemo(
+    () => friendsWithStatus.filter((f) => f.status.state === 'in_town').length,
+    [friendsWithStatus]
+  );
 
-    return (
-      <View style={styles.friendItem}>
-        <View style={styles.friendInfo}>
-          <View style={styles.avatar}>
-            <Text style={styles.avatarText}>
-              {item.name?.charAt(0).toUpperCase() || item.email.charAt(0).toUpperCase()}
-            </Text>
-          </View>
-          <View style={styles.friendDetails}>
-            <Text style={styles.friendName}>{item.name || item.email}</Text>
-            <Text style={styles.friendEmail}>{item.email}</Text>
-          </View>
-        </View>
-        {isFollowing ? (
-          <Text style={styles.followingText}>Following</Text>
-        ) : (
-          <TouchableOpacity
-            style={styles.followButton}
-            onPress={() => handleFollow(item.id)}
-          >
-            <Text style={styles.followButtonText}>Follow</Text>
-          </TouchableOpacity>
-        )}
-      </View>
-    );
-  };
+  const filtered = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return friendsWithStatus;
+    return friendsWithStatus.filter(({ friend }) => {
+      const name = friend.name?.toLowerCase() || '';
+      const email = friend.email.toLowerCase();
+      return name.includes(q) || email.includes(q);
+    });
+  }, [friendsWithStatus, searchQuery]);
 
   if (loading) {
     return (
-      <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color="#007AFF" />
+      <View style={styles.outer}>
+        <View style={styles.inner}>
+          <View style={styles.headerRow}>
+            <View style={styles.headerText}>
+              <Text style={styles.title}>Friends</Text>
+            </View>
+          </View>
+          <FriendsListSkeleton />
+        </View>
       </View>
     );
   }
 
-  const isSearchDisabled = searching || !searchQuery.trim();
-  const selectedFriendAvailability = selectedFriendsDate
-    ? getFriendAvailabilityForDate(selectedFriendsDate)
+  const searchDisabled = searching || !searchQuery.trim() || !userId;
+  const selectedFriendEntries = selectedFriendDate
+    ? friendAvailabilityEntries.filter((entry) => entry.date === selectedFriendDate)
     : [];
-  const selectedDateMark = selectedFriendsDate
-    ? friendsCalendarEntries[selectedFriendsDate]
-    : undefined;
+  const selectedInTownFriends = selectedFriendEntries.filter((entry) => entry.status === 'in_town');
+  const selectedOutOfTownFriends = selectedFriendEntries.filter(
+    (entry) => entry.status === 'out_of_town'
+  );
+  const markedFriendsCalendarEntries = {
+    ...friendsCalendarEntries,
+    ...(selectedFriendDate && {
+      [selectedFriendDate]: {
+        ...friendsCalendarEntries[selectedFriendDate],
+        customStyles: {
+          ...friendsCalendarEntries[selectedFriendDate]?.customStyles,
+          container: {
+            backgroundColor:
+              friendsCalendarEntries[selectedFriendDate]?.customStyles?.container?.backgroundColor ||
+              '#EAF3FF',
+            borderRadius: 8,
+            ...friendsCalendarEntries[selectedFriendDate]?.customStyles?.container,
+            borderWidth: 2,
+            borderColor: '#007AFF',
+          },
+          text: {
+            color:
+              friendsCalendarEntries[selectedFriendDate]?.customStyles?.text?.color || '#007AFF',
+            fontWeight: '700',
+            ...friendsCalendarEntries[selectedFriendDate]?.customStyles?.text,
+          },
+        },
+      },
+    }),
+  };
 
   return (
     <View style={styles.container}>
@@ -343,29 +450,36 @@ export default function FriendsScreen() {
           </Text>
         </TouchableOpacity>
       </View>
+  const showEmptyState = friends.length === 0;
 
-      {activeTab === 'list' && (
-        <View style={styles.content}>
-          {friends.length === 0 ? (
-            <View style={styles.emptyState}>
-              <Text style={styles.emptyStateText}>No friends yet</Text>
-              <Text style={styles.emptyStateSubtext}>
-                Search for users to add them as friends
-              </Text>
-            </View>
-          ) : (
-            <FlatList
-              data={friends}
-              renderItem={renderFriendItem}
-              keyExtractor={(item) => item.id}
-              contentContainerStyle={styles.list}
+  return (
+    <View style={styles.outer}>
+      <View style={styles.inner}>
+        <View style={styles.headerRow}>
+          <View style={styles.headerText}>
+            <Text style={styles.title}>Friends</Text>
+            <Text style={styles.subtitle}>
+              {friends.length} friend{friends.length === 1 ? '' : 's'} ·{' '}
+              {inTownThisWeek} in town this week
+            </Text>
+          </View>
+          {!showEmptyState && (
+            <Button
+              label="Add Friend"
+              variant="primary"
+              onPress={() => setAddOpen(true)}
+              style={styles.addButton}
             />
           )}
         </View>
-      )}
 
       {activeTab === 'calendar' && (
         <View style={styles.content}>
+          <Calendar
+            markedDates={markedFriendsCalendarEntries}
+          <View style={styles.calendarWrapper}>
+            <Calendar
+            markedDates={friendsCalendarEntries}
           <Calendar
             onDayPress={handleFriendsDatePress}
             markedDates={{
@@ -393,6 +507,7 @@ export default function FriendsScreen() {
               }),
             }}
             markingType="custom"
+            onDayPress={handleFriendsCalendarDatePress}
             theme={{
               todayTextColor: '#007AFF',
               selectedDayBackgroundColor: '#007AFF',
@@ -406,6 +521,36 @@ export default function FriendsScreen() {
               textDisabledColor: '#d9e1e8',
             }}
           />
+          <View style={styles.dateDetails}>
+            {selectedFriendDate ? (
+              <>
+                <Text style={styles.dateDetailsTitle}>{selectedFriendDate}</Text>
+                {selectedFriendEntries.length === 0 ? (
+                  <Text style={styles.dateDetailsEmpty}>
+                    No friend availability updates for this date.
+                  </Text>
+                ) : (
+                  <>
+                    <Text style={styles.dateDetailsSection}>
+                      In town ({selectedInTownFriends.length})
+                    </Text>
+                    <Text style={styles.dateDetailsNames}>
+                      {selectedInTownFriends.map((entry) => entry.friend_name).join(', ') || 'None'}
+                    </Text>
+                    <Text style={styles.dateDetailsSection}>
+                      Out of town ({selectedOutOfTownFriends.length})
+                    </Text>
+                    <Text style={styles.dateDetailsNames}>
+                      {selectedOutOfTownFriends.map((entry) => entry.friend_name).join(', ') ||
+                        'None'}
+                    </Text>
+                  </>
+                )}
+              </>
+            ) : (
+              <Text style={styles.dateDetailsEmpty}>
+                Tap a date to see which friends have shared availability.
+              </Text>
           <View style={styles.dateSummary}>
             {friends.length === 0 ? (
               <>
@@ -454,17 +599,30 @@ export default function FriendsScreen() {
       {activeTab === 'search' && (
         <View style={styles.content}>
           <View style={styles.searchContainer}>
+        {!showEmptyState && (
+          <View
+            style={[
+              styles.searchBar,
+              searchFocused && styles.searchBarFocused,
+            ]}
+          >
+            <Feather
+              name="search"
+              size={20}
+              color={colors.text.tertiary}
+              style={styles.searchIcon}
+            />
             <TextInput
               style={styles.searchInput}
-              placeholder="Search by name or email..."
               value={searchQuery}
               onChangeText={handleSearchQueryChange}
               onSubmitEditing={handleSearch}
+              returnKeyType="search"
             />
             <TouchableOpacity
-              style={[styles.searchButton, isSearchDisabled && styles.disabledButton]}
+              style={[styles.searchButton, searchDisabled && styles.disabledButton]}
               onPress={handleSearch}
-              disabled={isSearchDisabled}
+              disabled={searchDisabled}
             >
               {searching ? (
                 <ActivityIndicator color="#fff" size="small" />
@@ -472,135 +630,302 @@ export default function FriendsScreen() {
                 <Text style={styles.searchButtonText}>Search</Text>
               )}
             </TouchableOpacity>
+              onChangeText={setSearchQuery}
+              onFocus={() => setSearchFocused(true)}
+              onBlur={() => setSearchFocused(false)}
+              placeholder="Search friends..."
+              placeholderTextColor={colors.text.tertiary}
+              autoCapitalize="none"
+            />
           </View>
+        )}
 
-          {searchResults.length === 0 && searchQuery ? (
+          {hasSearched && !searching && searchResults.length === 0 ? (
             <View style={styles.emptyState}>
               <Text style={styles.emptyStateText}>No users found</Text>
+        {showEmptyState ? (
+          <View style={styles.emptyState}>
+            <View style={styles.emptyCircle}>
+              <Text style={styles.emptyGlyph}>👋</Text>
             </View>
-          ) : (
-            <FlatList
-              data={searchResults}
-              renderItem={renderSearchResult}
-              keyExtractor={(item) => item.id}
-              contentContainerStyle={styles.list}
+            <Text style={styles.emptyTitle}>No friends yet</Text>
+            <Text style={styles.emptyBody}>
+              Add friends to see when they're in town and start planning
+              together.
+            </Text>
+            <Button
+              label="Add your first friend"
+              variant="primary"
+              onPress={() => setAddOpen(true)}
+              style={styles.emptyButton}
             />
-          )}
-        </View>
-      )}
+          </View>
+        ) : (
+          <FlatList
+            data={filtered}
+            keyExtractor={(item) => item.friend.id}
+            ItemSeparatorComponent={() => <View style={styles.separator} />}
+            ListEmptyComponent={
+              <View style={styles.noMatch}>
+                <Text style={styles.noMatchText}>No friends match "{searchQuery}"</Text>
+              </View>
+            }
+            renderItem={({ item }) => (
+              <FriendRow
+                friend={item.friend}
+                status={item.status}
+                onMessage={() => {
+                  if (typeof window !== 'undefined' && window.alert) {
+                    window.alert(
+                      `Message ${item.friend.name || item.friend.email} — coming soon.`
+                    );
+                  }
+                }}
+              />
+            )}
+          />
+        )}
+      </View>
+
+      <AddFriendModal visible={addOpen} onClose={() => setAddOpen(false)} />
     </View>
   );
 }
 
+type FriendRowProps = {
+  friend: FriendWithStatus;
+  status: FriendStatus;
+  onMessage: () => void;
+};
+
+function FriendRow({ friend, status, onMessage }: FriendRowProps) {
+  const initial =
+    friend.name?.charAt(0).toUpperCase() ||
+    friend.email.charAt(0).toUpperCase();
+  const pill = STATUS_COLORS[status.state];
+
+  return (
+    <Pressable
+      style={({ hovered }: any) => [
+        styles.row,
+        hovered && styles.rowHover,
+      ]}
+    >
+      <View style={styles.avatar}>
+        {friend.avatar_url ? (
+          <Image source={{ uri: friend.avatar_url }} style={styles.avatarImage} />
+        ) : (
+          <Text style={styles.avatarInitial}>{initial}</Text>
+        )}
+      </View>
+      <View style={styles.rowBody}>
+        <Text style={styles.rowName}>{friend.name || friend.email}</Text>
+        <Text style={[styles.rowStatus, { color: pill.text }]}>
+          {status.label}
+        </Text>
+      </View>
+      <View style={styles.rowRight}>
+        <View style={[styles.pill, { backgroundColor: pill.bg }]}>
+          <Text style={[styles.pillText, { color: pill.text }]}>
+            {status.pillLabel}
+          </Text>
+        </View>
+        <Pressable
+          onPress={onMessage}
+          accessibilityLabel="Message"
+          accessibilityRole="button"
+          hitSlop={6}
+          style={({ pressed, hovered }: any) => [
+            styles.messageButton,
+            (pressed || hovered) && styles.messageButtonHover,
+          ]}
+        >
+          <Feather
+            name="message-circle"
+            size={20}
+            color={colors.text.secondary}
+          />
+        </Pressable>
+      </View>
+    </Pressable>
+  );
+}
+
 const styles = StyleSheet.create({
-  container: {
+  outer: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: colors.background.primary,
   },
   centerContainer: {
     flex: 1,
+    backgroundColor: colors.background.primary,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  tabs: {
-    flexDirection: 'row',
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
-  },
-  tab: {
+  inner: {
     flex: 1,
-    paddingVertical: 16,
-    alignItems: 'center',
+    width: '100%',
+    maxWidth: 800,
+    alignSelf: 'center',
+    paddingTop: spacing[7],
+    paddingHorizontal: spacing[4],
+    paddingBottom: spacing[6],
   },
-  activeTab: {
-    borderBottomWidth: 2,
-    borderBottomColor: '#007AFF',
-  },
-  tabText: {
-    fontSize: 16,
-    color: '#666',
-  },
-  activeTabText: {
-    color: '#007AFF',
-    fontWeight: '600',
-  },
-  content: {
-    flex: 1,
-  },
-  list: {
-    padding: 16,
-  },
-  friendItem: {
+  headerRow: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-end',
     justifyContent: 'space-between',
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    gap: spacing[3],
+    marginBottom: spacing[5],
+    flexWrap: 'wrap',
   },
-  friendInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
+  headerText: {
+    flexShrink: 1,
   },
-  avatar: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: '#007AFF',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-  },
-  avatarText: {
-    color: '#fff',
-    fontSize: 20,
+  title: {
+    fontFamily: fontFamilies.fraunces.semibold,
+    fontSize: typography.display.medium.fontSize,
     fontWeight: '600',
-  },
-  friendDetails: {
-    flex: 1,
-  },
-  friendName: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
+    color: colors.text.primary,
     marginBottom: 4,
   },
-  friendEmail: {
-    fontSize: 14,
-    color: '#666',
+  subtitle: {
+    fontFamily: fontFamilies.inter.regular,
+    fontSize: typography.body.default.fontSize,
+    color: colors.text.secondary,
   },
-  followButton: {
-    backgroundColor: '#007AFF',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 8,
+  addButton: {
+    minHeight: 40,
+    paddingHorizontal: spacing[4],
   },
-  followButtonText: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  unfollowButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 8,
+  searchBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    height: 48,
+    borderRadius: radius.md,
     borderWidth: 1,
-    borderColor: '#ddd',
+    borderColor: colors.border.subtle,
+    backgroundColor: colors.background.card,
+    paddingHorizontal: spacing[3],
+    marginBottom: spacing[4],
   },
-  unfollowButtonText: {
+  searchBarFocused: {
+    borderColor: colors.brand.primary,
+    borderWidth: 2,
+  },
+  searchIcon: {
+    marginRight: spacing[2],
+  },
+  searchInput: {
+    flex: 1,
+    fontFamily: fontFamilies.inter.regular,
+    fontSize: typography.body.default.fontSize,
+    color: colors.text.primary,
+  },
+  separator: {
+    height: 1,
+    backgroundColor: colors.border.subtle,
+  },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    height: 80,
+    paddingHorizontal: spacing[4],
+    paddingVertical: spacing[3],
+    gap: spacing[3],
+  },
+  rowHover: {
+    backgroundColor: colors.background.secondary,
+  },
+  avatar: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: colors.border.subtle,
+    backgroundColor: colors.background.secondary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  avatarImage: {
+    width: '100%',
+    height: '100%',
+  },
+  avatarInitial: {
+    fontFamily: fontFamilies.inter.medium,
+    fontSize: typography.body.default.fontSize,
+    fontWeight: '600',
+    color: colors.text.primary,
+  },
+  rowBody: {
+    flex: 1,
+    minWidth: 0,
+  },
+  rowName: {
+    fontFamily: fontFamilies.inter.medium,
+    fontSize: typography.body.default.fontSize,
+    fontWeight: '600',
+    color: colors.text.primary,
+    marginBottom: 2,
+  },
+  rowStatus: {
+    fontFamily: fontFamilies.inter.regular,
+    fontSize: typography.body.small.fontSize,
+  },
+  rowRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[2],
+  },
+  pill: {
+    borderRadius: radius.full,
+    paddingHorizontal: spacing[3],
+    paddingVertical: 6,
+  },
+  pillText: {
+    fontFamily: fontFamilies.inter.medium,
+    fontSize: typography.label.fontSize,
+    fontWeight: '600',
+    letterSpacing: typography.label.letterSpacing,
+  },
+  dateDetails: {
+    margin: 16,
+    padding: 16,
+    borderRadius: 12,
+    backgroundColor: '#F5F9FF',
+    borderWidth: 1,
+    borderColor: '#D6E9FF',
+  },
+  dateDetailsTitle: {
+    color: '#333',
+    fontSize: 16,
+    fontWeight: '700',
+    marginBottom: 12,
+  },
+  dateDetailsSection: {
+    color: '#333',
+    fontSize: 14,
+    fontWeight: '700',
+    marginTop: 8,
+  },
+  dateDetailsNames: {
     color: '#666',
     fontSize: 14,
-    fontWeight: '600',
+    lineHeight: 20,
+    marginTop: 4,
   },
-  followingText: {
-    color: '#4CAF50',
+  dateDetailsEmpty: {
+    color: '#666',
     fontSize: 14,
-    fontWeight: '600',
+    lineHeight: 20,
+    textAlign: 'center',
   },
   searchContainer: {
     flexDirection: 'row',
-    padding: 16,
+    paddingHorizontal: 16,
+    paddingTop: 24,
+    paddingBottom: 16,
     gap: 12,
   },
   searchInput: {
@@ -617,6 +942,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 12,
     borderRadius: 8,
+  messageButton: {
+    width: 36,
+    height: 36,
+    borderRadius: radius.full,
+    alignItems: 'center',
     justifyContent: 'center',
   },
   disabledButton: {
@@ -626,69 +956,52 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontWeight: '600',
+  messageButtonHover: {
+    backgroundColor: colors.background.secondary,
   },
   emptyState: {
     flex: 1,
-    justifyContent: 'center',
     alignItems: 'center',
-    padding: 40,
+    justifyContent: 'center',
+    paddingHorizontal: spacing[5],
+    paddingVertical: spacing[7],
+    gap: spacing[3],
   },
-  emptyStateText: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 8,
+  emptyCircle: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: colors.background.secondary,
+    marginBottom: spacing[2],
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  emptyStateSubtext: {
-    fontSize: 14,
-    color: '#666',
+  emptyGlyph: {
+    fontSize: 28,
+    lineHeight: 32,
+  },
+  emptyTitle: {
+    fontFamily: fontFamilies.fraunces.medium,
+    fontSize: typography.display.small.fontSize,
+    fontWeight: '500',
+    color: colors.text.primary,
     textAlign: 'center',
   },
-  legend: {
-    padding: 20,
-    borderTopWidth: 1,
-    borderTopColor: '#eee',
-  },
-  legendTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 12,
+  emptyBody: {
+    fontFamily: fontFamilies.inter.regular,
+    fontSize: typography.body.default.fontSize,
+    color: colors.text.secondary,
     textAlign: 'center',
+    lineHeight: 22,
+    maxWidth: 360,
+    marginBottom: spacing[3],
   },
-  legendRow: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    marginBottom: 8,
+  emptyButton: {
+    minWidth: 200,
   },
-  legendItem: {
-    flexDirection: 'row',
+  noMatch: {
+    paddingVertical: spacing[5],
     alignItems: 'center',
-    marginHorizontal: 12,
-  },
-  legendDot: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    marginRight: 8,
-  },
-  legendText: {
-    fontSize: 14,
-    color: '#666',
-  },
-  dateSummary: {
-    margin: 16,
-    padding: 16,
-    borderRadius: 12,
-    backgroundColor: '#F7FAFF',
-    borderWidth: 1,
-    borderColor: '#E1EDFF',
-  },
-  dateSummaryTitle: {
-    color: '#333',
-    fontSize: 17,
-    fontWeight: '700',
-    marginBottom: 8,
   },
   dateSummaryText: {
     color: '#666',
@@ -727,10 +1040,18 @@ const styles = StyleSheet.create({
     color: '#C62828',
   },
   inviteSection: {
-    paddingTop: 20,
+    paddingTop: 24,
+    paddingHorizontal: 16,
     borderTopWidth: 1,
     borderTopColor: '#eee',
-    marginTop: 20,
+    marginTop: 24,
+  },
+  calendarWrapper: {
+    paddingHorizontal: 16,
+    paddingTop: 24,
+  noMatchText: {
+    fontFamily: fontFamilies.inter.regular,
+    fontSize: typography.body.default.fontSize,
+    color: colors.text.secondary,
   },
 });
-
