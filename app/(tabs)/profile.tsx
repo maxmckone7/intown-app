@@ -77,6 +77,8 @@ const showAlert = (title: string, message: string) => {
   } else {
     Alert.alert(title, message);
   }
+};
+
 const showConfirmation = (
   title: string,
   message: string,
@@ -323,41 +325,6 @@ export default function ProfileScreen() {
     }
   };
 
-  const handleSignOut = () => {
-    if (Platform.OS === 'web') {
-      if (window.confirm('Sign Out\n\nAre you sure you want to sign out?')) {
-        void signOut();
-      }
-      return;
-    }
-
-    Alert.alert(
-      'Sign Out',
-      'Are you sure you want to sign out?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Sign Out',
-          style: 'destructive',
-          onPress: async () => {
-            await signOut();
-          },
-        },
-      ]
-  const handleSignOut = () => {
-    showConfirmation(
-      'Sign Out',
-      'Are you sure you want to sign out?',
-      'Sign Out',
-      async () => {
-        try {
-          await authService.signOut();
-          router.replace('/(auth)/login');
-        } catch (error: any) {
-          Alert.alert('Error', error.message || 'Failed to sign out');
-        }
-      }
-    );
   const handleSignOut = async () => {
     if (signingOut) return;
 
