@@ -99,10 +99,6 @@ class MockSupabaseClient {
       return { data: {}, error: null };
     },
 
-      // Mirror Supabase's non-enumerating behavior for local development.
-      return { data: {}, error: null };
-    },
-
     exchangeCodeForSession: async () => {
       const users = await this.getStoredData('users') || [];
       const userData = users[0];
