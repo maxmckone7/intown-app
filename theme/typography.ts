@@ -1,0 +1,70 @@
+import type { TextStyle } from 'react-native';
+
+export const fontFamilies = {
+  fraunces: {
+    medium: 'Fraunces_500Medium',
+    semibold: 'Fraunces_600SemiBold',
+  },
+  inter: {
+    regular: 'Inter_400Regular',
+    medium: 'Inter_500Medium',
+  },
+} as const;
+
+export const typography = {
+  display: {
+    large: {
+      fontFamily: fontFamilies.fraunces.semibold,
+      fontSize: 48,
+      fontWeight: '600',
+      lineHeight: 56,
+    },
+    medium: {
+      fontFamily: fontFamilies.fraunces.semibold,
+      fontSize: 32,
+      fontWeight: '600',
+      lineHeight: 38,
+    },
+    small: {
+      fontFamily: fontFamilies.fraunces.medium,
+      fontSize: 24,
+      fontWeight: '500',
+      lineHeight: 30,
+    },
+  },
+  body: {
+    large: {
+      fontFamily: fontFamilies.inter.regular,
+      fontSize: 18,
+      fontWeight: '400',
+      lineHeight: 26,
+    },
+    default: {
+      fontFamily: fontFamilies.inter.regular,
+      fontSize: 16,
+      fontWeight: '400',
+      lineHeight: 24,
+    },
+    small: {
+      fontFamily: fontFamilies.inter.regular,
+      fontSize: 14,
+      fontWeight: '400',
+      lineHeight: 20,
+    },
+  },
+  label: {
+    fontFamily: fontFamilies.inter.medium,
+    fontSize: 13,
+    fontWeight: '500',
+    letterSpacing: 0.5,
+    lineHeight: 18,
+  },
+  caption: {
+    fontFamily: fontFamilies.inter.regular,
+    fontSize: 12,
+    fontWeight: '400',
+    lineHeight: 16,
+  },
+} satisfies Record<string, TextStyle | Record<string, TextStyle>>;
+
+export type Typography = typeof typography;

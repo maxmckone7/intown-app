@@ -6,12 +6,13 @@ import {
   TouchableOpacity,
   StyleSheet,
   Alert,
-  ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { authService } from '../../services/auth';
+import Button from '../../components/Button';
+import { colors } from '../../theme';
 
 // Web-compatible alert function
 const showAlert = (title: string, message: string) => {
@@ -124,17 +125,15 @@ export default function SignUpScreen() {
             autoComplete="password"
           />
 
-          <TouchableOpacity
-            style={[styles.button, loading && styles.buttonDisabled]}
+          <Button
+            label="Sign Up"
+            variant="primary"
             onPress={handleSignUp}
+            loading={loading}
             disabled={loading}
-          >
-            {loading ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <Text style={styles.buttonText}>Sign Up</Text>
-            )}
-          </TouchableOpacity>
+            fullWidth
+            style={styles.primaryButton}
+          />
 
           <View style={styles.divider}>
             <View style={styles.dividerLine} />
@@ -142,22 +141,24 @@ export default function SignUpScreen() {
             <View style={styles.dividerLine} />
           </View>
 
-          <TouchableOpacity
-            style={[styles.socialButton, styles.googleButton]}
+          <Button
+            label="Continue with Google"
+            variant="secondary"
             onPress={handleGoogleLogin}
             disabled={loading}
-          >
-            <Text style={styles.socialButtonText}>Continue with Google</Text>
-          </TouchableOpacity>
+            fullWidth
+            style={styles.socialButton}
+          />
 
           {Platform.OS === 'ios' && (
-            <TouchableOpacity
-              style={[styles.socialButton, styles.appleButton]}
+            <Button
+              label="Continue with Apple"
+              variant="secondary"
               onPress={handleAppleLogin}
               disabled={loading}
-            >
-              <Text style={styles.socialButtonText}>Continue with Apple</Text>
-            </TouchableOpacity>
+              fullWidth
+              style={styles.socialButton}
+            />
           )}
 
           <TouchableOpacity
@@ -177,7 +178,7 @@ export default function SignUpScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: colors.background.primary,
   },
   content: {
     flex: 1,
@@ -190,40 +191,30 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     textAlign: 'center',
     marginBottom: 8,
-    color: '#333',
+    color: colors.text.primary,
   },
   subtitle: {
     fontSize: 16,
     textAlign: 'center',
     marginBottom: 24,
     color: '#666',
+    marginBottom: 40,
+    color: colors.text.secondary,
   },
   form: {
     width: '100%',
   },
   input: {
     borderWidth: 1,
-    borderColor: '#ddd',
+    borderColor: colors.border.default,
     borderRadius: 8,
     padding: 16,
     fontSize: 16,
     marginBottom: 16,
     backgroundColor: '#f9f9f9',
   },
-  button: {
-    backgroundColor: '#007AFF',
-    borderRadius: 8,
-    padding: 16,
-    alignItems: 'center',
+  primaryButton: {
     marginTop: 8,
-  },
-  buttonDisabled: {
-    opacity: 0.6,
-  },
-  buttonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
   },
   divider: {
     flexDirection: 'row',
@@ -233,44 +224,28 @@ const styles = StyleSheet.create({
   dividerLine: {
     flex: 1,
     height: 1,
-    backgroundColor: '#ddd',
+    backgroundColor: colors.border.default,
   },
   dividerText: {
     marginHorizontal: 16,
-    color: '#666',
-    fontSize: 14,
-  },
-  socialButton: {
-    borderRadius: 8,
-    padding: 16,
-    alignItems: 'center',
-    marginBottom: 12,
-    borderWidth: 1,
-  },
-  googleButton: {
-    borderColor: '#ddd',
-    backgroundColor: '#fff',
-  },
-  appleButton: {
-    borderColor: '#000',
-    backgroundColor: '#000',
-  },
-  socialButtonText: {
+    color: colors.text.tertiary,
     fontSize: 16,
     fontWeight: '600',
-    color: '#333',
+  },
+  socialButton: {
+    marginBottom: 12,
   },
   linkButton: {
     marginTop: 24,
     alignItems: 'center',
   },
   linkText: {
-    color: '#666',
-    fontSize: 14,
+    color: colors.text.secondary,
+    fontSize: 16,
   },
   linkTextBold: {
     color: '#007AFF',
-    fontWeight: '600',
+    fontWeight: '700',
   },
 });
 

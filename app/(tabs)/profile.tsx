@@ -18,6 +18,8 @@ import { authService } from '../../services/auth';
 import { supabase } from '../../lib/supabase';
 import { User } from '../../lib/types';
 import InviteFriends from '../../components/InviteFriends';
+import Button from '../../components/Button';
+import { colors } from '../../theme';
 
 type SocialKey = 'instagram' | 'x' | 'linkedin' | 'website';
 type SocialAccounts = Partial<Record<SocialKey, string>>;
@@ -324,15 +326,13 @@ export default function ProfileScreen() {
         </TouchableOpacity>
         <Text style={styles.email}>{user.email}</Text>
         <View style={styles.photoActions}>
-          <TouchableOpacity
-            style={styles.photoButton}
+          <Button
+            label={user.avatar_url ? 'Change Photo' : 'Add Photo'}
+            variant="primary"
+            size="sm"
             onPress={handlePickAvatar}
             disabled={avatarUploading}
-          >
-            <Text style={styles.photoButtonText}>
-              {user.avatar_url ? 'Change Photo' : 'Add Photo'}
-            </Text>
-          </TouchableOpacity>
+          />
           {user.avatar_url && (
             <TouchableOpacity
               style={styles.removePhotoButton}
@@ -411,24 +411,21 @@ export default function ProfileScreen() {
             ))}
 
             <View style={styles.editButtons}>
-              <TouchableOpacity
-                style={[styles.button, styles.cancelButton]}
+              <Button
+                label="Cancel"
+                variant="secondary"
                 onPress={handleCancelEdit}
                 disabled={saving}
-              >
-                <Text style={styles.cancelButtonText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.button, styles.saveButton, saving && styles.disabledButton]}
+                style={styles.editButtonFlex}
+              />
+              <Button
+                label="Save"
+                variant="primary"
                 onPress={handleUpdateProfile}
+                loading={saving}
                 disabled={saving}
-              >
-                {saving ? (
-                  <ActivityIndicator color="#fff" />
-                ) : (
-                  <Text style={styles.saveButtonText}>Save</Text>
-                )}
-              </TouchableOpacity>
+                style={styles.editButtonFlex}
+              />
             </View>
           </View>
         ) : (
@@ -494,17 +491,14 @@ export default function ProfileScreen() {
         <InviteFriends />
       </View>
 
-      <TouchableOpacity
-        style={[styles.signOutButton, signingOut && styles.disabledButton]}
+      <Button
+        label="Sign Out"
+        variant="destructive"
         onPress={handleSignOut}
+        loading={signingOut}
         disabled={signingOut}
-      >
-        {signingOut ? (
-          <ActivityIndicator color="#fff" />
-        ) : (
-          <Text style={styles.signOutButtonText}>Sign Out</Text>
-        )}
-      </TouchableOpacity>
+        style={styles.signOutButton}
+      />
     </ScrollView>
   );
 }
@@ -512,7 +506,7 @@ export default function ProfileScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: colors.background.primary,
   },
   contentContainer: {
     paddingBottom: 20,
@@ -527,7 +521,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 32,
     borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    borderBottomColor: colors.border.subtle,
   },
   avatar: {
     width: 100,
@@ -556,7 +550,7 @@ const styles = StyleSheet.create({
   },
   email: {
     fontSize: 16,
-    color: '#666',
+    color: colors.text.secondary,
   },
   photoActions: {
     flexDirection: 'row',
@@ -564,31 +558,20 @@ const styles = StyleSheet.create({
     gap: 12,
     marginTop: 14,
   },
-  photoButton: {
-    backgroundColor: '#007AFF',
-    borderRadius: 8,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-  },
-  photoButtonText: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '600',
-  },
   removePhotoButton: {
     paddingHorizontal: 8,
     paddingVertical: 8,
   },
   removePhotoButtonText: {
-    color: '#F44336',
-    fontSize: 14,
-    fontWeight: '600',
+    color: '#C62828',
+    fontSize: 16,
+    fontWeight: '700',
   },
   section: {
     paddingHorizontal: 16,
     paddingVertical: 24,
     borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    borderBottomColor: colors.border.subtle,
   },
   sectionHeader: {
     flexDirection: 'row',
@@ -598,25 +581,26 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   sectionTitle: {
-    fontSize: 20,
+    fontSize: 24,
     fontWeight: '700',
-    color: '#333',
+    color: colors.text.primary,
     marginBottom: 4,
   },
   sectionSubtitle: {
-    fontSize: 14,
-    color: '#666',
-    lineHeight: 20,
+    fontSize: 16,
+    color: colors.text.secondary,
+    lineHeight: 22,
   },
   label: {
-    fontSize: 14,
-    color: '#666',
+    fontSize: 16,
+    color: colors.text.tertiary,
     marginBottom: 8,
-    fontWeight: '600',
+    fontWeight: '500',
   },
   value: {
     fontSize: 16,
-    color: '#333',
+    color: colors.text.primary,
+    fontWeight: '700',
   },
   editButton: {
     paddingHorizontal: 12,
@@ -624,21 +608,21 @@ const styles = StyleSheet.create({
   },
   editButtonText: {
     color: '#007AFF',
-    fontSize: 14,
-    fontWeight: '600',
+    fontSize: 16,
+    fontWeight: '700',
   },
   editContainer: {
     marginTop: 8,
   },
   fieldLabel: {
-    fontSize: 14,
-    color: '#333',
+    fontSize: 16,
+    color: colors.text.primary,
     fontWeight: '600',
     marginBottom: 8,
   },
   input: {
     borderWidth: 1,
-    borderColor: '#ddd',
+    borderColor: colors.border.default,
     borderRadius: 8,
     padding: 12,
     fontSize: 16,
@@ -650,15 +634,15 @@ const styles = StyleSheet.create({
     textAlignVertical: 'top',
   },
   helperText: {
-    color: '#777',
-    fontSize: 13,
+    color: colors.text.secondary,
+    fontSize: 14,
     marginTop: -4,
     marginBottom: 16,
   },
   socialHeading: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '700',
-    color: '#333',
+    color: colors.text.primary,
     marginTop: 4,
     marginBottom: 12,
   },
@@ -680,9 +664,9 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   chipText: {
-    color: '#007AFF',
+    color: '#0062CC',
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: '700',
   },
   socialList: {
     gap: 10,
@@ -693,44 +677,23 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   socialLabel: {
-    color: '#666',
-    fontSize: 15,
-    fontWeight: '600',
+    color: colors.text.tertiary,
+    fontSize: 16,
+    fontWeight: '500',
   },
   socialValue: {
-    color: '#333',
+    color: colors.text.primary,
     flex: 1,
-    fontSize: 15,
+    fontSize: 16,
+    fontWeight: '600',
     textAlign: 'right',
   },
   editButtons: {
     flexDirection: 'row',
     gap: 12,
   },
-  button: {
+  editButtonFlex: {
     flex: 1,
-    padding: 12,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  cancelButton: {
-    backgroundColor: '#f0f0f0',
-  },
-  cancelButtonText: {
-    color: '#666',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  saveButton: {
-    backgroundColor: '#007AFF',
-  },
-  disabledButton: {
-    opacity: 0.7,
-  },
-  saveButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
   },
   signOutButton: {
     marginHorizontal: 16,
@@ -744,6 +707,7 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontWeight: '600',
+    margin: 20,
   },
 });
 

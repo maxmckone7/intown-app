@@ -1,217 +1,53 @@
 import { useState, useEffect } from 'react';
 import {
   View,
-  Text,
   StyleSheet,
-  ActivityIndicator,
   Alert,
-  TouchableOpacity,
-  Animated,
-  Platform,
+  ScrollView,
 } from 'react-native';
-import { Calendar, DateData } from 'react-native-calendars';
+import { useRouter } from 'expo-router';
 import { authService } from '../../services/auth';
-import { calendarService } from '../../services/calendar';
-import { CalendarEntry, CalendarStatus } from '../../lib/types';
+import { friendsService } from '../../services/friends';
+import { FriendWithStatus } from '../../lib/types';
+import InviteFriends from '../../components/InviteFriends';
+import FriendsCalendar from '../../components/FriendsCalendar';
+import DayDetailModal from '../../components/DayDetailModal';
+import { CalendarSkeleton } from '../../components/Skeleton';
+import { colors } from '../../theme';
 
-export default function MyCalendarScreen() {
-  const [entries, setEntries] = useState<Record<string, any>>({});
+export default function FriendsCalendarScreen() {
+  const router = useRouter();
+  const [friends, setFriends] = useState<FriendWithStatus[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
-  const [userId, setUserId] = useState<string | null>(null);
-  const [hoveredDate, setHoveredDate] = useState<string | null>(null);
-  const [currentMonth, setCurrentMonth] = useState(new Date());
 
   useEffect(() => {
-    loadUserAndEntries();
-    
-    // Add web-specific hover styles
-    if (Platform.OS === 'web' && typeof document !== 'undefined') {
-      const style = document.createElement('style');
-      style.textContent = `
-        .react-native-calendars__day-container:hover {
-          transform: scale(1.15) !important;
-          transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
-          z-index: 10 !important;
-        }
-        .react-native-calendars__day-text:hover {
-          transform: scale(1.15) !important;
-        }
-      `;
-      document.head.appendChild(style);
-      
-      return () => {
-        if (document.head.contains(style)) {
-          document.head.removeChild(style);
-        }
-      };
-    }
+    loadUserAndFriends();
   }, []);
 
-  const loadUserAndEntries = async () => {
+  const loadUserAndFriends = async () => {
     try {
       const user = await authService.getCurrentUser();
       if (!user) {
         Alert.alert('Error', 'Not authenticated');
         return;
       }
-
-      setUserId(user.id);
-      await loadEntries(user.id);
+      const friendsList = await friendsService.getFriends(user.id);
+      setFriends(friendsList);
     } catch (error: any) {
-      Alert.alert('Error', error.message || 'Failed to load calendar');
+      Alert.alert('Error', error.message || 'Failed to load friends');
     } finally {
       setLoading(false);
     }
   };
 
-  const loadEntries = async (uid: string) => {
-    try {
-      // Load only explicit user overrides (dates the user has clicked)
-      const calendarEntries = await calendarService.getEntries(uid);
-      const markedDates: Record<string, any> = {};
-
-      calendarEntries.forEach((entry) => {
-        markedDates[entry.date] = {
-          customStyles: {
-            container: {
-              backgroundColor: entry.status === 'in_town' ? '#66BB6A' : '#EF5350', // Softer colors
-              borderRadius: 12,
-              shadowColor: '#000',
-              shadowOffset: { width: 0, height: 2 },
-              shadowOpacity: 0.15,
-              shadowRadius: 3,
-              elevation: 3,
-            },
-            text: {
-              color: '#fff',
-              fontWeight: '600',
-            },
-          },
-        };
-      });
-
-      setEntries(markedDates);
-    } catch (error: any) {
-      Alert.alert('Error', error.message || 'Failed to load entries');
-    }
-  };
-
-  // Helper to get all dates in current month
-  const getDatesInMonth = (year: number, month: number): string[] => {
-    const dates: string[] = [];
-    const daysInMonth = new Date(year, month + 1, 0).getDate();
-    for (let day = 1; day <= daysInMonth; day++) {
-      const date = new Date(year, month, day);
-      dates.push(date.toISOString().split('T')[0]);
-    }
-    return dates;
-  };
-
-  // Helper to get all marked dates including defaults (green for unmarked dates)
-  const getAllMarkedDates = (): Record<string, any> => {
-    const allMarked: Record<string, any> = {};
-    const year = currentMonth.getFullYear();
-    const month = currentMonth.getMonth();
-    const datesInMonth = getDatesInMonth(year, month);
-    
-    // Pre-populate all dates in current month as green (in town) by default
-    datesInMonth.forEach((date) => {
-      if (entries[date]) {
-        // Use explicit user override
-        allMarked[date] = entries[date];
-      } else {
-        // Default: green (in town)
-        allMarked[date] = {
-          customStyles: {
-            container: {
-              backgroundColor: '#66BB6A', // Softer green
-              borderRadius: 12,
-              shadowColor: '#000',
-              shadowOffset: { width: 0, height: 1 },
-              shadowOpacity: 0.1,
-              shadowRadius: 2,
-              elevation: 2,
-            },
-            text: {
-              color: '#fff',
-              fontWeight: '600',
-            },
-          },
-        };
-      }
-    });
-    
-    return allMarked;
-  };
-
-  const handleDatePress = async (day: { dateString: string }) => {
-    if (!userId) return;
-
-    const date = day.dateString;
-    setSelectedDate(date);
-
-    // Determine current status: if entry exists, check its status; otherwise default to in_town (green)
-    const existingEntry = entries[date];
-    let currentStatus: CalendarStatus;
-    
-    if (existingEntry) {
-      // Check the background color to determine current status
-      const bgColor = existingEntry.customStyles?.container?.backgroundColor;
-      currentStatus = (bgColor === '#66BB6A' || bgColor === '#4CAF50') ? 'in_town' : 'out_of_town';
-    } else {
-      // Default state: treat as in_town (green) - all dates default to in town
-      currentStatus = 'in_town';
-    }
-
-    // Toggle: if in_town (green) → switch to out_of_town (red), and vice versa
-    const newStatus: CalendarStatus = currentStatus === 'in_town' ? 'out_of_town' : 'in_town';
-
-    try {
-      // Optimistically update UI immediately for instant feedback
-      const optimisticEntry = {
-        customStyles: {
-          container: {
-            backgroundColor: newStatus === 'in_town' ? '#66BB6A' : '#EF5350', // Softer colors
-            borderRadius: 12,
-            shadowColor: '#000',
-            shadowOffset: { width: 0, height: 2 },
-            shadowOpacity: 0.15,
-            shadowRadius: 3,
-            elevation: 3,
-          },
-          text: {
-            color: '#fff',
-            fontWeight: '600',
-          },
-        },
-      };
-      setEntries({ ...entries, [date]: optimisticEntry });
-
-      // Save to backend (only explicit overrides are stored)
-      await calendarService.setEntry(userId, date, newStatus);
-      // Reload to ensure sync
-      await loadEntries(userId);
-    } catch (error: any) {
-      // Revert on error
-      await loadEntries(userId);
-      Alert.alert('Error', error.message || 'Failed to update calendar');
-    }
-  };
-
-
   if (loading) {
     return (
-      <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color="#007AFF" />
+      <View style={styles.container}>
+        <CalendarSkeleton />
       </View>
     );
   }
-
-
-  const handleMonthChange = (month: any) => {
-    setCurrentMonth(new Date(month.year, month.month - 1));
-  };
 
   return (
     <View style={styles.container}>
@@ -277,13 +113,37 @@ export default function MyCalendarScreen() {
       />
       </View>
     </View>
+    <>
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={styles.content}
+      >
+        <FriendsCalendar
+          totalFriends={friends.length}
+          onDayPress={(iso) => setSelectedDate(iso)}
+          onAddFriendsPress={() => router.push('/(tabs)/friends')}
+        />
+        <View style={styles.inviteSection}>
+          <InviteFriends />
+        </View>
+      </ScrollView>
+      <DayDetailModal
+        visible={selectedDate !== null}
+        date={selectedDate}
+        friends={friends}
+        onClose={() => setSelectedDate(null)}
+      />
+    </>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fafafa',
+    backgroundColor: colors.background.primary,
+  },
+  content: {
+    paddingBottom: 24,
   },
   centerContainer: {
     flex: 1,
@@ -308,10 +168,15 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: '#333',
     letterSpacing: -0.5,
+  inviteSection: {
+    paddingHorizontal: 16,
+    paddingTop: 24,
+    borderTopWidth: 1,
+    borderTopColor: colors.border.subtle,
+    marginTop: 8,
   },
   calendarWrapper: {
     paddingHorizontal: 16,
     paddingTop: 24,
   },
 });
-
