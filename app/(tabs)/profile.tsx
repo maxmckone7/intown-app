@@ -4,6 +4,7 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
+  Pressable,
   Alert,
   ActivityIndicator,
   TextInput,
@@ -12,6 +13,7 @@ import {
   Platform,
 } from 'react-native';
 import type { KeyboardTypeOptions } from 'react-native';
+import { Feather } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
 import { authService } from '../../services/auth';
@@ -19,7 +21,15 @@ import { supabase } from '../../lib/supabase';
 import { User } from '../../lib/types';
 import InviteFriends from '../../components/InviteFriends';
 import Button from '../../components/Button';
-import { colors } from '../../theme';
+import { useToast } from '../../components/ToastProvider';
+import {
+  colors,
+  fontFamilies,
+  radius,
+  shadows,
+  spacing,
+  typography,
+} from '../../theme';
 
 type SocialKey = 'instagram' | 'x' | 'linkedin' | 'website';
 type SocialAccounts = Partial<Record<SocialKey, string>>;
@@ -70,6 +80,8 @@ const getSocialAccountCount = (value?: Record<string, string> | null) =>
 
 const getAvatarInitial = (profile: User) =>
   profile.name?.charAt(0).toUpperCase() || profile.email.charAt(0).toUpperCase();
+
+const getDisplayName = (profile: User) => profile.name?.trim() || 'Add your name';
 
 const showAlert = (title: string, message: string) => {
   if (Platform.OS === 'web') {
@@ -147,11 +159,13 @@ export default function ProfileScreen() {
   const [saving, setSaving] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
   const [avatarUploading, setAvatarUploading] = useState(false);
+  const [resettingPassword, setResettingPassword] = useState(false);
   const [name, setName] = useState('');
   const [location, setLocation] = useState('');
   const [interests, setInterests] = useState('');
   const [socialAccounts, setSocialAccounts] = useState<SocialAccounts>({});
   const router = useRouter();
+  const toast = useToast();
 
   useEffect(() => {
     loadUser();
@@ -255,7 +269,7 @@ export default function ProfileScreen() {
     try {
       const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!permission.granted) {
-        Alert.alert(
+        showAlert(
           'Permission Required',
           'Allow photo library access to add a profile picture.'
         );
@@ -282,10 +296,10 @@ export default function ProfileScreen() {
 
       if (error) throw error;
 
-      setUser({ ...user, avatar_url: avatarUrl });
-      Alert.alert('Success', 'Profile picture updated');
+      setUser((current) => (current ? { ...current, avatar_url: avatarUrl } : current));
+      toast.success('Profile photo saved');
     } catch (error: any) {
-      Alert.alert('Error', error.message || 'Failed to update profile picture');
+      showAlert('Error', error.message || 'Failed to update profile picture');
     } finally {
       setAvatarUploading(false);
     }
@@ -303,25 +317,26 @@ export default function ProfileScreen() {
 
       if (error) throw error;
 
-      setUser({ ...user, avatar_url: null });
-      Alert.alert('Success', 'Profile picture removed');
+      setUser((current) => (current ? { ...current, avatar_url: null } : current));
+      toast.info('Profile photo removed');
     } catch (error: any) {
-      Alert.alert('Error', error.message || 'Failed to remove profile picture');
+      showAlert('Error', error.message || 'Failed to remove profile picture');
     } finally {
       setAvatarUploading(false);
     }
   };
 
-  const signOut = async () => {
+  const handlePasswordReset = async () => {
+    if (!user || resettingPassword) return;
+
+    setResettingPassword(true);
     try {
-      await authService.signOut();
-      if (Platform.OS === 'web') {
-        router.push('/(auth)/login');
-      } else {
-        router.replace('/(auth)/login');
-      }
+      await authService.requestPasswordReset(user.email);
+      toast.info(`Password reset email sent to ${user.email}`);
     } catch (error: any) {
-      showAlert('Error', error.message || 'Failed to sign out');
+      showAlert('Error', error.message || 'Failed to send password reset email');
+    } finally {
+      setResettingPassword(false);
     }
   };
 
@@ -351,200 +366,266 @@ export default function ProfileScreen() {
     return null;
   }
 
+  const displayName = getDisplayName(user);
+  const hasName = Boolean(user.name?.trim());
+  const socialAccountCount = getSocialAccountCount(user.social_accounts);
+
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
-      <View style={styles.header}>
-        <TouchableOpacity
-          style={styles.avatar}
-          onPress={handlePickAvatar}
-          disabled={avatarUploading}
-        >
-          {user.avatar_url ? (
-            <Image source={{ uri: user.avatar_url }} style={styles.avatarImage} />
-          ) : (
-            <Text style={styles.avatarText}>{getAvatarInitial(user)}</Text>
-          )}
-          {avatarUploading && (
-            <View style={styles.avatarLoadingOverlay}>
-              <ActivityIndicator color="#fff" />
-            </View>
-          )}
-        </TouchableOpacity>
-        <Text style={styles.email}>{user.email}</Text>
-        <View style={styles.photoActions}>
-          <Button
-            label={user.avatar_url ? 'Change Photo' : 'Add Photo'}
-            variant="primary"
-            size="sm"
-            onPress={handlePickAvatar}
-            disabled={avatarUploading}
-          />
-          {user.avatar_url && (
+      <View style={styles.page}>
+        <View style={styles.heroCard}>
+          <View style={styles.avatarCluster}>
             <TouchableOpacity
-              style={styles.removePhotoButton}
-              onPress={handleRemoveAvatar}
+              style={styles.avatarButton}
+              onPress={handlePickAvatar}
               disabled={avatarUploading}
+              accessibilityRole="button"
+              accessibilityLabel={user.avatar_url ? 'Change profile photo' : 'Add profile photo'}
+              activeOpacity={0.82}
             >
-              <Text style={styles.removePhotoButtonText}>Remove</Text>
+              {user.avatar_url ? (
+                <Image source={{ uri: user.avatar_url }} style={styles.avatarImage} />
+              ) : (
+                <Text style={styles.avatarText}>{getAvatarInitial(user)}</Text>
+              )}
+              <View style={styles.avatarEditOverlay} pointerEvents="none">
+                <Feather name="camera" size={15} color="#FFFFFF" />
+                <Text style={styles.avatarEditText}>
+                  {user.avatar_url ? 'Change' : 'Add photo'}
+                </Text>
+              </View>
+              {avatarUploading && (
+                <View style={styles.avatarLoadingOverlay}>
+                  <ActivityIndicator color="#fff" />
+                </View>
+              )}
             </TouchableOpacity>
-          )}
-        </View>
-      </View>
-
-      <View style={styles.section}>
-        <View style={styles.sectionHeader}>
-          <View>
-            <Text style={styles.sectionTitle}>Profile Details</Text>
-            <Text style={styles.sectionSubtitle}>
-              Add details friends can use to recognize and connect with you.
-            </Text>
+            {user.avatar_url && (
+              <TouchableOpacity
+                style={styles.avatarRemoveButton}
+                onPress={handleRemoveAvatar}
+                disabled={avatarUploading}
+                accessibilityRole="button"
+                accessibilityLabel="Remove profile photo"
+              >
+                <Feather name="x" size={18} color={colors.text.primary} />
+              </TouchableOpacity>
+            )}
           </View>
-          {!editing && (
-            <TouchableOpacity
-              style={styles.editButton}
-              onPress={() => setEditing(true)}
-            >
-              <Text style={styles.editButtonText}>Edit</Text>
-            </TouchableOpacity>
-          )}
+          <Text style={[styles.profileName, !hasName && styles.profileNamePlaceholder]}>
+            {displayName}
+          </Text>
+          <Text style={styles.profileEmail}>{user.email}</Text>
+          <Text style={styles.autosaveHint}>Photo updates save automatically.</Text>
         </View>
 
-        {editing ? (
-          <View style={styles.editContainer}>
-            <Text style={styles.fieldLabel}>Name</Text>
-            <TextInput
-              style={styles.input}
-              value={name}
-              onChangeText={setName}
-              placeholder="Enter your name"
-              editable={!saving}
-            />
+        <View style={styles.sectionCard}>
+          <View style={styles.sectionHeader}>
+            <View style={styles.sectionHeaderCopy}>
+              <Text style={styles.sectionTitle}>Profile Details</Text>
+              <Text style={styles.sectionSubtitle}>
+                Add details friends can use to recognize and connect with you.
+              </Text>
+            </View>
+            {!editing && (
+              <TouchableOpacity
+                style={styles.editButton}
+                onPress={() => setEditing(true)}
+                accessibilityRole="button"
+                accessibilityLabel="Edit profile details"
+              >
+                <Text style={styles.editButtonText}>Edit</Text>
+              </TouchableOpacity>
+            )}
+          </View>
 
-            <Text style={styles.fieldLabel}>Location</Text>
-            <TextInput
-              style={styles.input}
-              value={location}
-              onChangeText={setLocation}
-              placeholder="City, State"
-              editable={!saving}
-            />
+          {editing ? (
+            <View style={styles.editContainer}>
+              <Text style={styles.fieldLabel}>Name</Text>
+              <TextInput
+                style={styles.input}
+                value={name}
+                onChangeText={setName}
+                placeholder="Enter your name"
+                editable={!saving}
+              />
 
-            <Text style={styles.fieldLabel}>Interests</Text>
-            <TextInput
-              style={[styles.input, styles.multilineInput]}
-              value={interests}
-              onChangeText={setInterests}
-              placeholder="Hiking, concerts, coffee"
-              editable={!saving}
-              multiline
-            />
-            <Text style={styles.helperText}>Separate interests with commas.</Text>
+              <Text style={styles.fieldLabel}>Location</Text>
+              <TextInput
+                style={styles.input}
+                value={location}
+                onChangeText={setLocation}
+                placeholder="City, State"
+                editable={!saving}
+              />
 
-            <Text style={styles.socialHeading}>Connected Social Media</Text>
-            {SOCIAL_FIELDS.map((field) => (
-              <View key={field.key}>
-                <Text style={styles.fieldLabel}>{field.label}</Text>
-                <TextInput
-                  style={styles.input}
-                  value={socialAccounts[field.key] || ''}
-                  onChangeText={(value) => handleSocialAccountChange(field.key, value)}
-                  placeholder={field.placeholder}
-                  keyboardType={field.keyboardType || 'default'}
-                  autoCapitalize="none"
-                  editable={!saving}
+              <Text style={styles.fieldLabel}>Interests</Text>
+              <TextInput
+                style={[styles.input, styles.multilineInput]}
+                value={interests}
+                onChangeText={setInterests}
+                placeholder="Hiking, concerts, coffee"
+                editable={!saving}
+                multiline
+              />
+              <Text style={styles.helperText}>Separate interests with commas.</Text>
+
+              <Text style={styles.socialHeading}>Connected Social Media</Text>
+              {SOCIAL_FIELDS.map((field) => (
+                <View key={field.key}>
+                  <Text style={styles.fieldLabel}>{field.label}</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={socialAccounts[field.key] || ''}
+                    onChangeText={(value) => handleSocialAccountChange(field.key, value)}
+                    placeholder={field.placeholder}
+                    keyboardType={field.keyboardType || 'default'}
+                    autoCapitalize="none"
+                    editable={!saving}
+                  />
+                </View>
+              ))}
+
+              <View style={styles.editButtons}>
+                <Button
+                  label="Cancel"
+                  variant="secondary"
+                  onPress={handleCancelEdit}
+                  disabled={saving}
+                  style={styles.editButtonFlex}
+                />
+                <Button
+                  label="Save Profile"
+                  variant="primary"
+                  onPress={handleUpdateProfile}
+                  loading={saving}
+                  disabled={saving}
+                  style={styles.editButtonFlex}
                 />
               </View>
-            ))}
-
-            <View style={styles.editButtons}>
-              <Button
-                label="Cancel"
-                variant="secondary"
-                onPress={handleCancelEdit}
-                disabled={saving}
-                style={styles.editButtonFlex}
-              />
-              <Button
-                label="Save"
-                variant="primary"
-                onPress={handleUpdateProfile}
-                loading={saving}
-                disabled={saving}
-                style={styles.editButtonFlex}
-              />
             </View>
-          </View>
-        ) : (
-          <View style={styles.profileSummary}>
-            <View style={styles.detailRow}>
-              <Text style={styles.label}>Name</Text>
-              <Text style={styles.value}>{user.name || 'Not set'}</Text>
-            </View>
-            <View style={styles.detailRow}>
-              <Text style={styles.label}>Location</Text>
-              <Text style={styles.value}>{user.location || 'Not set'}</Text>
-            </View>
-            <View style={styles.detailRow}>
-              <Text style={styles.label}>Interests</Text>
-              {user.interests && user.interests.length > 0 ? (
-                <View style={styles.chipContainer}>
-                  {user.interests.map((interest) => (
-                    <View key={interest} style={styles.chip}>
-                      <Text style={styles.chipText}>{interest}</Text>
-                    </View>
-                  ))}
-                </View>
-              ) : (
-                <Text style={styles.value}>Not set</Text>
-              )}
-            </View>
-            <View style={styles.detailRow}>
-              <Text style={styles.label}>Connected Social Media</Text>
-              {getSocialAccountCount(user.social_accounts) > 0 ? (
-                <View style={styles.socialList}>
-                  {SOCIAL_FIELDS.map((field) => {
-                    const value = normalizeSocialAccounts(user.social_accounts)[field.key];
-                    if (!value) return null;
-
-                    return (
-                      <View key={field.key} style={styles.socialRow}>
-                        <Text style={styles.socialLabel}>{field.label}</Text>
-                        <Text style={styles.socialValue}>{value}</Text>
+          ) : (
+            <View style={styles.profileSummary}>
+              <View style={styles.detailCard}>
+                <Text style={styles.label}>Name</Text>
+                <Text style={styles.value}>{user.name || 'Not set'}</Text>
+              </View>
+              <View style={styles.detailCard}>
+                <Text style={styles.label}>Location</Text>
+                <Text style={styles.value}>{user.location || 'Not set'}</Text>
+              </View>
+              <View style={styles.detailCard}>
+                <Text style={styles.label}>Interests</Text>
+                {user.interests && user.interests.length > 0 ? (
+                  <View style={styles.chipContainer}>
+                    {user.interests.map((interest) => (
+                      <View key={interest} style={styles.chip}>
+                        <Text style={styles.chipText}>{interest}</Text>
                       </View>
-                    );
-                  })}
-                </View>
-              ) : (
-                <Text style={styles.value}>Not set</Text>
-              )}
+                    ))}
+                  </View>
+                ) : (
+                  <Text style={styles.value}>Not set</Text>
+                )}
+              </View>
+              <View style={styles.detailCard}>
+                <Text style={styles.label}>
+                  Connected Social Media{socialAccountCount > 0 ? ` (${socialAccountCount})` : ''}
+                </Text>
+                {socialAccountCount > 0 ? (
+                  <View style={styles.socialList}>
+                    {SOCIAL_FIELDS.map((field) => {
+                      const value = normalizeSocialAccounts(user.social_accounts)[field.key];
+                      if (!value) return null;
+
+                      return (
+                        <View key={field.key} style={styles.socialRow}>
+                          <Text style={styles.socialLabel}>{field.label}</Text>
+                          <Text style={styles.socialValue}>{value}</Text>
+                        </View>
+                      );
+                    })}
+                  </View>
+                ) : (
+                  <Text style={styles.value}>Not set</Text>
+                )}
+              </View>
+            </View>
+          )}
+        </View>
+
+        <View style={styles.sectionCard}>
+          <View style={styles.sectionHeader}>
+            <View style={styles.sectionHeaderCopy}>
+              <Text style={styles.sectionTitle}>Account</Text>
+              <Text style={styles.sectionSubtitle}>
+                Manage sign-in details and security actions.
+              </Text>
             </View>
           </View>
-        )}
-      </View>
 
-      <View style={styles.section}>
-        <Text style={styles.label}>Account Created</Text>
-        <Text style={styles.value}>
-          {new Date(user.created_at).toLocaleDateString('en-US', {
-            year: 'numeric',
-            month: 'long',
-            day: 'numeric',
-          })}
-        </Text>
-      </View>
+          <View style={styles.accountList}>
+            <View style={styles.accountRow}>
+              <View style={styles.accountIcon}>
+                <Feather name="calendar" size={18} color={colors.brand.primary} />
+              </View>
+              <View style={styles.accountCopy}>
+                <Text style={styles.label}>Account Created</Text>
+                <Text style={styles.value}>
+                  {new Date(user.created_at).toLocaleDateString('en-US', {
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric',
+                  })}
+                </Text>
+              </View>
+            </View>
 
-      <View style={styles.section}>
-        <InviteFriends />
-      </View>
+            <View style={styles.accountRow}>
+              <View style={styles.accountIcon}>
+                <Feather name="lock" size={18} color={colors.brand.primary} />
+              </View>
+              <View style={styles.accountCopy}>
+                <Text style={styles.label}>Password</Text>
+                <Text style={styles.accountDescription}>
+                  Send a reset link to your account email.
+                </Text>
+              </View>
+              <Button
+                label="Reset Password"
+                variant="secondary"
+                size="sm"
+                onPress={handlePasswordReset}
+                loading={resettingPassword}
+                disabled={resettingPassword}
+                style={styles.accountAction}
+              />
+            </View>
+          </View>
+        </View>
 
-      <Button
-        label="Sign Out"
-        variant="destructive"
-        onPress={handleSignOut}
-        loading={signingOut}
-        disabled={signingOut}
-        style={styles.signOutButton}
-      />
+        <View style={styles.inviteCard}>
+          <InviteFriends />
+        </View>
+
+        <Pressable
+          onPress={handleSignOut}
+          disabled={signingOut}
+          accessibilityRole="button"
+          accessibilityState={{ disabled: signingOut, busy: signingOut }}
+          style={({ pressed, hovered }: any) => [
+            styles.signOutPressable,
+            (pressed || hovered) && !signingOut && styles.signOutPressableActive,
+            signingOut && styles.disabledAction,
+          ]}
+        >
+          {signingOut ? (
+            <ActivityIndicator color="#C62828" />
+          ) : (
+            <Text style={styles.signOutText}>Sign Out</Text>
+          )}
+        </Pressable>
+      </View>
     </ScrollView>
   );
 }
@@ -555,7 +636,172 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background.primary,
   },
   contentContainer: {
-    paddingBottom: 20,
+    alignItems: 'center',
+    paddingHorizontal: spacing[4],
+    paddingVertical: spacing[6],
+  },
+  page: {
+    width: '100%',
+    maxWidth: 960,
+    gap: spacing[5],
+  },
+  heroCard: {
+    alignItems: 'center',
+    backgroundColor: colors.background.card,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border.subtle,
+    paddingHorizontal: spacing[6],
+    paddingVertical: spacing[6],
+    ...shadows.md,
+  },
+  avatarCluster: {
+    position: 'relative',
+    marginBottom: spacing[4],
+  },
+  avatarButton: {
+    width: 116,
+    height: 116,
+    borderRadius: 58,
+    backgroundColor: colors.brand.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+    overflow: 'hidden',
+    borderWidth: 3,
+    borderColor: colors.background.card,
+    ...shadows.lg,
+  },
+  avatarEditOverlay: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: spacing[1],
+    paddingVertical: spacing[2],
+    backgroundColor: 'rgba(31, 27, 22, 0.72)',
+  },
+  avatarEditText: {
+    color: '#FFFFFF',
+    fontFamily: fontFamilies.inter.medium,
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  avatarRemoveButton: {
+    position: 'absolute',
+    right: -2,
+    top: -2,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: colors.background.card,
+    borderWidth: 1,
+    borderColor: colors.border.subtle,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...shadows.sm,
+  },
+  profileName: {
+    fontFamily: fontFamilies.fraunces.semibold,
+    fontSize: typography.display.medium.fontSize,
+    fontWeight: '600',
+    lineHeight: typography.display.medium.lineHeight,
+    color: colors.text.primary,
+    textAlign: 'center',
+  },
+  profileNamePlaceholder: {
+    color: colors.text.tertiary,
+  },
+  profileEmail: {
+    fontSize: typography.body.default.fontSize,
+    color: colors.text.secondary,
+    marginTop: spacing[1],
+  },
+  autosaveHint: {
+    fontSize: typography.caption.fontSize,
+    color: colors.text.tertiary,
+    marginTop: spacing[3],
+  },
+  sectionCard: {
+    backgroundColor: colors.background.card,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border.subtle,
+    padding: spacing[5],
+    ...shadows.sm,
+  },
+  sectionHeaderCopy: {
+    flex: 1,
+  },
+  detailCard: {
+    backgroundColor: colors.background.primary,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border.subtle,
+    padding: spacing[4],
+    gap: spacing[1],
+  },
+  accountList: {
+    gap: spacing[3],
+  },
+  accountRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[3],
+    backgroundColor: colors.background.primary,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border.subtle,
+    padding: spacing[4],
+  },
+  accountIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#FCE8EE',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  accountCopy: {
+    flex: 1,
+  },
+  accountDescription: {
+    fontSize: typography.body.small.fontSize,
+    color: colors.text.secondary,
+    lineHeight: typography.body.small.lineHeight,
+  },
+  accountAction: {
+    minWidth: 150,
+  },
+  inviteCard: {
+    marginHorizontal: -spacing[4],
+  },
+  signOutPressable: {
+    alignSelf: 'center',
+    minWidth: 160,
+    minHeight: 44,
+    borderRadius: radius.full,
+    borderWidth: 1,
+    borderColor: '#F4C7C3',
+    backgroundColor: '#FFF6F5',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: spacing[5],
+    paddingVertical: spacing[3],
+  },
+  signOutPressableActive: {
+    backgroundColor: '#FFE9E7',
+  },
+  disabledAction: {
+    opacity: 0.6,
+  },
+  signOutText: {
+    color: '#C62828',
+    fontFamily: fontFamilies.inter.medium,
+    fontSize: typography.body.default.fontSize,
+    fontWeight: '700',
   },
   centerContainer: {
     flex: 1,
