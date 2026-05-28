@@ -96,9 +96,6 @@ class MockSupabaseClient {
     },
 
     resetPasswordForEmail: async () => {
-      return { data: {}, error: null };
-    },
-
       // Mirror Supabase's non-enumerating behavior for local development.
       return { data: {}, error: null };
     },
