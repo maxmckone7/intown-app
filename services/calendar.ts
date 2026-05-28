@@ -32,11 +32,20 @@ export const calendarService = {
       .single();
 
     if (existing) {
-      // Update existing entry
+      // Upsert by primary key to avoid the update/filter chain that can fail in
+      // the current Supabase runtime.
       const { data, error } = await supabase
         .from('calendar_entries')
-        .update({ status, updated_at: new Date().toISOString() })
-        .eq('id', existing.id)
+        .upsert(
+          {
+            id: existing.id,
+            user_id: userId,
+            date,
+            status,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: 'id' }
+        )
         .select()
         .single();
 
@@ -87,7 +96,9 @@ export const calendarService = {
       return [];
     }
 
-    const friendIds = friendships.map((f: { friend_id: string }) => f.friend_id);
+    const friendIds = (friendships as Array<{ friend_id: string }>).map(
+      (friendship) => friendship.friend_id
+    );
 
     let query = supabase
       .from('calendar_entries')

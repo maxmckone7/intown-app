@@ -34,9 +34,12 @@ class MockSupabaseClient {
   auth = {
     signUp: async ({ email, password, options }: any) => {
       const userId = `user_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
+      const createdAt = new Date().toISOString();
       const user = {
         id: userId,
         email,
+        created_at: createdAt,
+        last_sign_in_at: createdAt,
         user_metadata: options?.data || {},
       };
 
@@ -50,7 +53,7 @@ class MockSupabaseClient {
         location: null,
         interests: [],
         social_accounts: {},
-        created_at: new Date().toISOString(),
+        created_at: createdAt,
       });
       await this.setStoredData('users', users);
 
@@ -95,6 +98,67 @@ class MockSupabaseClient {
       return { data: { user, session }, error: null };
     },
 
+    resetPasswordForEmail: async () => {
+      // Mirror Supabase's non-enumerating behavior for local development.
+      return { data: {}, error: null };
+    },
+
+    exchangeCodeForSession: async () => {
+      const users = await this.getStoredData('users') || [];
+      const userData = users[0];
+
+      if (!userData) {
+        return { data: null, error: { message: 'Password reset link is invalid or expired' } };
+      }
+
+      const user = {
+        id: userData.id,
+        email: userData.email,
+        user_metadata: { name: userData.name },
+      };
+
+      const session = {
+        access_token: `mock_token_${userData.id}`,
+        refresh_token: `mock_refresh_${userData.id}`,
+        expires_in: 3600,
+        expires_at: Date.now() + 3600000,
+        token_type: 'bearer',
+        user,
+      };
+      await this.setStoredData('auth_session', session);
+
+      return { data: { user, session }, error: null };
+    },
+
+    updateUser: async ({ password, data }: any) => {
+      const session = await this.getStoredData('auth_session');
+      if (!session?.user) {
+        return { data: null, error: { message: 'You need a valid reset link before updating your password' } };
+      }
+
+      const nextSession = {
+        ...session,
+        user: {
+          ...session.user,
+          user_metadata: {
+            ...session.user.user_metadata,
+            ...data,
+          },
+        },
+      };
+      await this.setStoredData('auth_session', nextSession);
+
+      if (password) {
+        const users = await this.getStoredData('users') || [];
+        const nextUsers = users.map((user: any) =>
+          user.id === session.user.id ? { ...user, password_updated_at: new Date().toISOString() } : user
+        );
+        await this.setStoredData('users', nextUsers);
+      }
+
+      return { data: { user: nextSession.user }, error: null };
+    },
+
     signOut: async () => {
       await this.removeStoredData('auth_session');
       return { error: null };
@@ -119,12 +183,55 @@ class MockSupabaseClient {
     },
 
     signInWithOAuth: async ({ provider }: any) => {
-      return {
-        data: null,
-        error: {
-          message: `${provider} sign-in requires Supabase environment variables. Add EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY to enable OAuth.`,
+      const providerLabel = provider === 'google' ? 'Google' : provider === 'apple' ? 'Apple' : provider;
+      const email = `dev-${provider}@intown.local`;
+      const name = `Dev ${providerLabel} User`;
+      const signedInAt = new Date().toISOString();
+
+      const users = (await this.getStoredData('users')) || [];
+      let userRecord = users.find((u: any) => u.email === email);
+      let isNewUser = false;
+      if (!userRecord) {
+        isNewUser = true;
+        userRecord = {
+          id: `oauth_${provider}_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`,
+          email,
+          name,
+          avatar_url: null,
+          location: null,
+          interests: [],
+          social_accounts: { [provider]: true },
+          created_at: signedInAt,
+        };
+        users.push(userRecord);
+        await this.setStoredData('users', users);
+      }
+
+      const user = {
+        id: userRecord.id,
+        email,
+        created_at: userRecord.created_at,
+        last_sign_in_at: signedInAt,
+        user_metadata: {
+          name,
+          full_name: name,
+          avatar_url: null,
+          picture: null,
+          provider,
         },
       };
+
+      const session = {
+        access_token: `mock_token_${userRecord.id}`,
+        refresh_token: `mock_refresh_${userRecord.id}`,
+        expires_in: 3600,
+        expires_at: Date.now() + 3600000,
+        token_type: 'bearer',
+        user,
+      };
+      await this.setStoredData('auth_session', session);
+
+      return { data: { provider, mocked: true, user, session, isNewUser }, error: null };
     },
 
     onAuthStateChange: (callback: any) => {
@@ -181,10 +288,21 @@ class MockSupabaseClient {
 class MockQueryBuilder {
   private table: string;
   private client: MockSupabaseClient;
-  private filters: Array<{ type: string; field: string; value?: any; values?: any[] }> = [];
+  private filters: Array<{
+    type: string;
+    field?: string;
+    value?: any;
+    values?: any[];
+    conditions?: Array<{ field: string; value: any }>;
+  }> = [];
   private orderBy?: { field: string; ascending: boolean };
   private limitCount?: number;
   private selectFields?: string;
+  private mutation?: {
+    type: 'insert' | 'upsert' | 'update' | 'delete';
+    values?: any;
+    options?: { onConflict?: string };
+  };
 
   constructor(table: string, client: MockSupabaseClient) {
     this.table = table;
@@ -225,13 +343,19 @@ class MockQueryBuilder {
     // Simple OR mock - parse "field.ilike.%value%" patterns
     const matches = condition.match(/(\w+)\.ilike\.%([^%]+)%/g);
     if (matches) {
-      matches.forEach((match) => {
+      const conditions = matches.flatMap((match) => {
         const matchResult = match.match(/(\w+)\.ilike\.%([^%]+)%/);
-        if (matchResult) {
-          const [, field, value] = matchResult;
-          this.filters.push({ type: 'ilike', field, value });
+        if (!matchResult) {
+          return [];
         }
+
+        const [, field, value] = matchResult;
+        return [{ field, value }];
       });
+
+      if (conditions.length > 0) {
+        this.filters.push({ type: 'or_ilike', conditions });
+      }
     }
     return this;
   }
@@ -247,7 +371,12 @@ class MockQueryBuilder {
   }
 
   async single() {
-    const results = await this.execute();
+    const { data, error } = await this.executeResult();
+    if (error) {
+      return { data: null, error };
+    }
+
+    const results = Array.isArray(data) ? data : data ? [data] : [];
     if (results.length === 0) {
       return { data: null, error: { code: 'PGRST116', message: 'No rows returned' } };
     }
@@ -257,11 +386,125 @@ class MockQueryBuilder {
   // Make the query builder awaitable - return { data, error } format
   async then(resolve: any, reject: any) {
     try {
-      const results = await this.execute();
-      resolve({ data: results, error: null });
+      resolve(await this.executeResult());
     } catch (error: any) {
       resolve({ data: null, error });
     }
+  }
+
+  private matchesFilters(item: any): boolean {
+    return this.filters.every((filter) => {
+      switch (filter.type) {
+        case 'eq':
+          return item[filter.field!] === filter.value;
+        case 'neq':
+          return item[filter.field!] !== filter.value;
+        case 'in':
+          return filter.values?.includes(item[filter.field!]) || false;
+        case 'gte':
+          return item[filter.field!] >= filter.value;
+        case 'lte':
+          return item[filter.field!] <= filter.value;
+        case 'ilike':
+          const fieldValue = String(item[filter.field!] || '').toLowerCase();
+          return fieldValue.includes(filter.value?.toLowerCase() || '');
+        case 'or_ilike':
+          return (
+            filter.conditions?.some((condition) => {
+              const conditionValue = String(item[condition.field] || '').toLowerCase();
+              return conditionValue.includes(condition.value?.toLowerCase() || '');
+            }) || false
+          );
+        default:
+          return true;
+      }
+    });
+  }
+
+  private createRow(values: any) {
+    return {
+      ...values,
+      id: values.id || `${this.table}_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`,
+      created_at: values.created_at || new Date().toISOString(),
+      updated_at: values.updated_at || new Date().toISOString(),
+    };
+  }
+
+  private async executeMutation() {
+    const mutation = this.mutation!;
+    const data = await this.client.getTableData(this.table);
+
+    if (mutation.type === 'insert') {
+      const values = Array.isArray(mutation.values) ? mutation.values : [mutation.values];
+      const inserted = values.map((value) => this.createRow(value));
+
+      await this.client.setTableData(this.table, [...data, ...inserted]);
+      return { data: inserted, error: null };
+    }
+
+    if (mutation.type === 'upsert') {
+      const values = Array.isArray(mutation.values) ? mutation.values : [mutation.values];
+      const conflictFields = (mutation.options?.onConflict || 'id')
+        .split(',')
+        .map((field) => field.trim())
+        .filter(Boolean);
+      const now = new Date().toISOString();
+      const upserted = values.map((value) => {
+        const index = data.findIndex((item: any) =>
+          conflictFields.every((field) => item[field] === value[field])
+        );
+
+        if (index === -1) {
+          const newItem = this.createRow(value);
+          data.push(newItem);
+          return newItem;
+        }
+
+        data[index] = {
+          ...data[index],
+          ...value,
+          updated_at: now,
+        };
+        return data[index];
+      });
+
+      await this.client.setTableData(this.table, data);
+      return { data: upserted, error: null };
+    }
+
+    if (mutation.type === 'update') {
+      const now = new Date().toISOString();
+      const updated: any[] = [];
+      const nextData = data.map((item: any) => {
+        if (!this.matchesFilters(item)) {
+          return item;
+        }
+
+        const nextItem = {
+          ...item,
+          ...mutation.values,
+          updated_at: now,
+        };
+        updated.push(nextItem);
+        return nextItem;
+      });
+
+      await this.client.setTableData(this.table, nextData);
+      return { data: updated, error: null };
+    }
+
+    const deleted = data.filter((item: any) => this.matchesFilters(item));
+    const nextData = data.filter((item: any) => !this.matchesFilters(item));
+    await this.client.setTableData(this.table, nextData);
+    return { data: deleted, error: null };
+  }
+
+  private async executeResult() {
+    if (this.mutation) {
+      return this.executeMutation();
+    }
+
+    return { data: await this.execute(), error: null };
   }
 
   async execute(): Promise<any[]> {
@@ -273,27 +516,7 @@ class MockQueryBuilder {
     }
 
     // Apply filters
-    data = data.filter((item: any) => {
-      return this.filters.every((filter) => {
-        switch (filter.type) {
-          case 'eq':
-            return item[filter.field] === filter.value;
-          case 'neq':
-            return item[filter.field] !== filter.value;
-          case 'in':
-            return filter.values?.includes(item[filter.field]) || false;
-          case 'gte':
-            return item[filter.field] >= filter.value;
-          case 'lte':
-            return item[filter.field] <= filter.value;
-          case 'ilike':
-            const fieldValue = String(item[filter.field] || '').toLowerCase();
-            return fieldValue.includes(filter.value?.toLowerCase() || '');
-          default:
-            return true;
-        }
-      });
-    });
+    data = data.filter((item: any) => this.matchesFilters(item));
 
     // Apply ordering
     if (this.orderBy) {
@@ -336,84 +559,24 @@ class MockQueryBuilder {
     return data;
   }
 
-  async insert(values: any) {
-    const data = await this.client.getTableData(this.table);
-    const newItem = {
-      ...values,
-      id: values.id || `${this.table}_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`,
-      created_at: values.created_at || new Date().toISOString(),
-      updated_at: values.updated_at || new Date().toISOString(),
-    };
-    data.push(newItem);
-    await this.client.setTableData(this.table, data);
-    
-    return { data: newItem, error: null };
+  insert(values: any) {
+    this.mutation = { type: 'insert', values };
+    return this;
   }
 
-  async upsert(values: any, options?: { onConflict?: string }) {
-    const data = await this.client.getTableData(this.table);
-    const conflictField = options?.onConflict || 'id';
-    const index = data.findIndex((item: any) => item[conflictField] === values[conflictField]);
-    const now = new Date().toISOString();
-
-    if (index === -1) {
-      const newItem = {
-        ...values,
-        id: values.id || `${this.table}_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`,
-        created_at: values.created_at || now,
-        updated_at: values.updated_at || now,
-      };
-      data.push(newItem);
-      await this.client.setTableData(this.table, data);
-      return { data: newItem, error: null };
-    }
-
-    data[index] = {
-      ...data[index],
-      ...values,
-      updated_at: now,
-    };
-    await this.client.setTableData(this.table, data);
-    return { data: data[index], error: null };
+  upsert(values: any, options?: { onConflict?: string }) {
+    this.mutation = { type: 'upsert', values, options };
+    return this;
   }
 
-  async update(values: any) {
-    const data = await this.client.getTableData(this.table);
-    const filter = this.filters.find((f) => f.type === 'eq');
-    
-    if (!filter) {
-      return { data: null, error: { message: 'Update requires eq filter' } };
-    }
-
-    const index = data.findIndex((item: any) => item[filter.field] === filter.value);
-    if (index === -1) {
-      return { data: null, error: { message: 'Item not found' } };
-    }
-
-    data[index] = {
-      ...data[index],
-      ...values,
-      updated_at: new Date().toISOString(),
-    };
-    await this.client.setTableData(this.table, data);
-    return { data: data[index], error: null };
+  update(values: any) {
+    this.mutation = { type: 'update', values };
+    return this;
   }
 
-  async delete() {
-    const data = await this.client.getTableData(this.table);
-    const filters = this.filters.filter((f) => f.type === 'eq');
-    
-    if (filters.length === 0) {
-      return { error: { message: 'Delete requires eq filter' } };
-    }
-
-    let filtered = data;
-    filters.forEach((filter) => {
-      filtered = filtered.filter((item: any) => item[filter.field] !== filter.value);
-    });
-    
-    await this.client.setTableData(this.table, filtered);
-    return { error: null };
+  delete() {
+    this.mutation = { type: 'delete' };
+    return this;
   }
 }
 
@@ -440,6 +603,9 @@ if (hasSupabaseConfig) {
         getSession: async () => ({ data: { session: null }, error: null }),
         signUp: async () => ({ data: null, error: { message: 'Not initialized' } }),
         signInWithPassword: async () => ({ data: null, error: { message: 'Not initialized' } }),
+        resetPasswordForEmail: async () => ({ data: null, error: { message: 'Not initialized' } }),
+        exchangeCodeForSession: async () => ({ data: null, error: { message: 'Not initialized' } }),
+        updateUser: async () => ({ data: null, error: { message: 'Not initialized' } }),
         signOut: async () => ({ error: null }),
         getUser: async () => ({ data: { user: null }, error: null }),
         signInWithOAuth: async () => ({ data: null, error: { message: 'Not initialized' } }),
@@ -453,3 +619,4 @@ if (hasSupabaseConfig) {
 }
 
 export const supabase = supabaseInstance;
+export const isMockSupabase = !hasSupabaseConfig;

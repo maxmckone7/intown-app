@@ -12,8 +12,13 @@ import {
 } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import ContactsPickerModal, { SelectedContact } from './ContactsPickerModal';
+import { createInviteLink } from '../lib/invite';
 
-export default function InviteFriends() {
+type InviteFriendsProps = {
+  variant?: 'card' | 'compact';
+};
+
+export default function InviteFriends({ variant = 'card' }: InviteFriendsProps) {
   const [inviteLink, setInviteLink] = useState('');
   const [copied, setCopied] = useState(false);
   const [pickerVisible, setPickerVisible] = useState(false);
@@ -22,6 +27,10 @@ export default function InviteFriends() {
     if (inviteLink) return inviteLink;
     const mockLink = `https://intown.app/invite/${Math.random().toString(36).slice(2, 11)}`;
     setInviteLink(mockLink);
+  // Generate mock invite link (stub for now)
+  const generateInviteLink = () => {
+    // TODO: Replace with real invite link generation from API
+    setInviteLink(createInviteLink());
     setCopied(false);
     return mockLink;
   };
@@ -124,6 +133,54 @@ export default function InviteFriends() {
 
     Alert.alert('No contact info', 'Selected contacts have no phone number or email.');
   };
+  if (variant === 'compact') {
+    return (
+      <View style={styles.compactContainer}>
+        {!inviteLink ? (
+          <TouchableOpacity
+            style={styles.compactButton}
+            onPress={generateInviteLink}
+          >
+            <Text style={styles.compactButtonText}>Invite friends</Text>
+          </TouchableOpacity>
+        ) : (
+          <>
+            <View style={styles.compactLinkSection}>
+              <TextInput
+                style={styles.compactLinkInput}
+                value={inviteLink}
+                editable={false}
+              />
+              <TouchableOpacity
+                style={styles.compactCopyButton}
+                onPress={copyToClipboard}
+              >
+                <Text style={styles.compactCopyButtonText}>
+                  {copied ? 'Copied!' : 'Copy'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.compactActions}>
+              <TouchableOpacity
+                style={styles.compactActionLink}
+                onPress={shareViaSMS}
+              >
+                <Text style={styles.compactActionLinkText}>Share via SMS</Text>
+              </TouchableOpacity>
+              <Text style={styles.compactActionDivider}>|</Text>
+              <TouchableOpacity
+                style={styles.compactActionLink}
+                onPress={shareViaEmail}
+              >
+                <Text style={styles.compactActionLinkText}>Share via Email</Text>
+              </TouchableOpacity>
+            </View>
+          </>
+        )}
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -292,6 +349,67 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
     letterSpacing: 0.3,
+  },
+  compactContainer: {
+    width: '100%',
+    maxWidth: 420,
+    marginTop: 20,
+    alignItems: 'center',
+  },
+  compactButton: {
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+  },
+  compactButtonText: {
+    color: '#007AFF',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  compactLinkSection: {
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  compactLinkInput: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 8,
+    padding: 10,
+    fontSize: 14,
+    color: '#333',
+    backgroundColor: '#f9f9f9',
+  },
+  compactCopyButton: {
+    backgroundColor: '#007AFF',
+    borderRadius: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  compactCopyButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  compactActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 12,
+  },
+  compactActionLink: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  compactActionLinkText: {
+    color: '#007AFF',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  compactActionDivider: {
+    color: '#999',
+    fontSize: 14,
   },
 });
 

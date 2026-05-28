@@ -1,4 +1,4 @@
-import { supabase } from '../lib/supabase';
+import { supabase, isMockSupabase } from '../lib/supabase';
 import * as AuthSession from 'expo-auth-session';
 import * as WebBrowser from 'expo-web-browser';
 import { Session, User as SupabaseUser } from '@supabase/supabase-js';
@@ -15,11 +15,19 @@ export type AuthUser = SupabaseUser & {
 };
 
 const OAUTH_REDIRECT_PATH = 'auth/callback';
+const PASSWORD_RESET_REDIRECT_PATH = 'auth/reset-password';
 
 const getOAuthRedirectUrl = () =>
   AuthSession.makeRedirectUri({
     scheme: 'intown',
     path: OAUTH_REDIRECT_PATH,
+    isTripleSlashed: true,
+  });
+
+const getPasswordResetRedirectUrl = () =>
+  AuthSession.makeRedirectUri({
+    scheme: 'intown',
+    path: PASSWORD_RESET_REDIRECT_PATH,
     isTripleSlashed: true,
   });
 
@@ -32,6 +40,19 @@ const getOAuthProfile = (user: SupabaseUser) => {
     name: metadata.name || metadata.full_name || user.email,
     avatar_url: metadata.avatar_url || metadata.picture || null,
   };
+};
+
+const isLikelyNewAuthUser = (user: SupabaseUser | null | undefined) => {
+  const createdAt = user?.created_at ? Date.parse(user.created_at) : NaN;
+  const lastSignInAt = user?.last_sign_in_at
+    ? Date.parse(user.last_sign_in_at)
+    : NaN;
+
+  if (!Number.isFinite(createdAt) || !Number.isFinite(lastSignInAt)) {
+    return false;
+  }
+
+  return Math.abs(lastSignInAt - createdAt) <= 10_000;
 };
 
 const ensureUserProfile = async (user: SupabaseUser | null) => {
@@ -61,6 +82,18 @@ const completeOAuthSignIn = async (provider: 'google' | 'apple') => {
   });
 
   if (error) throw error;
+
+  // Without real Supabase credentials the mock client signs the user in inline
+  // and returns the session directly, bypassing the browser-based OAuth flow.
+  if (isMockSupabase && data?.mocked) {
+    await ensureUserProfile(data.user);
+    return {
+      user: data.user,
+      session: data.session,
+      isNewUser: data.isNewUser ?? isLikelyNewAuthUser(data.user),
+    };
+  }
+
   if (!data?.url) {
     throw new Error(`${provider} sign-in did not return an OAuth URL.`);
   }
@@ -88,7 +121,10 @@ const completeOAuthSignIn = async (provider: 'google' | 'apple') => {
   if (sessionError) throw sessionError;
   await ensureUserProfile(sessionData.user);
 
-  return sessionData;
+  return {
+    ...sessionData,
+    isNewUser: isLikelyNewAuthUser(sessionData.user),
+  };
 };
 
 export const authService = {
@@ -131,6 +167,28 @@ export const authService = {
     if (!data || !data.user) {
       throw new Error('Invalid login credentials');
     }
+    return data;
+  },
+
+  async requestPasswordReset(email: string) {
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: getPasswordResetRedirectUrl(),
+    });
+
+    if (error) throw error;
+  },
+
+  async exchangePasswordResetCode(code: string) {
+    const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+
+    if (error) throw error;
+    return data;
+  },
+
+  async updatePassword(password: string) {
+    const { data, error } = await supabase.auth.updateUser({ password });
+
+    if (error) throw error;
     return data;
   },
 

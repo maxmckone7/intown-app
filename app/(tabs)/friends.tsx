@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
-  ActivityIndicator,
   Alert,
   FlatList,
   Image,
@@ -16,6 +15,7 @@ import { friendsService } from '../../services/friends';
 import { FriendWithStatus } from '../../lib/types';
 import Button from '../../components/Button';
 import AddFriendModal from '../../components/AddFriendModal';
+import InviteFriends from '../../components/InviteFriends';
 import { FriendsListSkeleton } from '../../components/Skeleton';
 import {
   colors,
@@ -30,7 +30,7 @@ type FriendStatusState = 'in_town' | 'away' | 'returning_soon';
 type FriendStatus = {
   state: FriendStatusState;
   label: string; // e.g. "In town until June 3rd"
-  pillLabel: string; // e.g. "In town"
+  pillLabel: string; // e.g. "In Town"
 };
 
 const STATUS_TEXTS: Record<FriendStatusState, string[]> = {
@@ -55,7 +55,7 @@ const STATUS_TEXTS: Record<FriendStatusState, string[]> = {
 };
 
 const PILL_LABELS: Record<FriendStatusState, string> = {
-  in_town: 'In town',
+  in_town: 'In Town',
   away: 'Away',
   returning_soon: 'Returning soon',
 };
@@ -213,6 +213,7 @@ export default function FriendsScreen() {
               onPress={() => setAddOpen(true)}
               style={styles.emptyButton}
             />
+            <InviteFriends variant="compact" />
           </View>
         ) : (
           <FlatList

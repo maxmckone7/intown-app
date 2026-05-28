@@ -41,6 +41,8 @@ type Props = {
   getDayData?: (isoDate: string) => HeatmapDayData;
   onDayPress?: (isoDate: string) => void;
   onAddFriendsPress?: () => void;
+  showEmptyStatePrompt?: boolean;
+  onDismissEmptyState?: () => void;
 };
 
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -51,10 +53,13 @@ export default function FriendsCalendar({
   getDayData,
   onDayPress,
   onAddFriendsPress,
+  showEmptyStatePrompt,
+  onDismissEmptyState,
 }: Props) {
   const today = startOfToday();
   const [viewMonth, setViewMonth] = useState<Date>(startOfMonth(today));
   const [selectedGroupId, setSelectedGroupId] = useState<string>('all');
+  const [isEmptyStateDismissed, setIsEmptyStateDismissed] = useState(false);
 
   const visibleDays = useMemo(() => {
     const gridStart = startOfWeek(startOfMonth(viewMonth), { weekStartsOn: 0 });
@@ -67,12 +72,19 @@ export default function FriendsCalendar({
   const goToday = () => setViewMonth(startOfMonth(today));
 
   const isEmpty = totalFriends <= 0;
+  const shouldShowEmptyStatePrompt =
+    showEmptyStatePrompt ?? !isEmptyStateDismissed;
 
   const handleDayPress = (iso: string) => {
     if (onDayPress) onDayPress(iso);
     // DES-14 will replace this console.log with a real day-detail modal
     // eslint-disable-next-line no-console
     console.log('day pressed:', iso);
+  };
+
+  const handleDismissEmptyState = () => {
+    setIsEmptyStateDismissed(true);
+    onDismissEmptyState?.();
   };
 
   return (
@@ -132,55 +144,76 @@ export default function FriendsCalendar({
           />
         </View>
 
-        <View style={styles.weekdayRow}>
-          {WEEKDAYS.map((day) => (
-            <Text key={day} style={styles.weekdayLabel}>
-              {day.toUpperCase()}
-            </Text>
-          ))}
-        </View>
+        <View style={styles.calendarFrame}>
+          <View style={styles.weekdayRow}>
+            {WEEKDAYS.map((day) => (
+              <Text key={day} style={styles.weekdayLabel}>
+                {day.toUpperCase()}
+              </Text>
+            ))}
+          </View>
 
-        <View style={styles.grid}>
-          {visibleDays.map((date) => {
-            const iso = ISO(date);
-            const inMonth = isSameMonth(date, viewMonth);
-            const todayCell = isSameDay(date, today);
-            const data = getDayData
-              ? getDayData(iso)
-              : getMockDayData(
-                  iso,
-                  totalFriends,
-                  selectedGroupId === 'all' ? undefined : selectedGroupId
-                );
-            const bg = getHeatmapColor(data.friendsInTown, data.totalFriends);
-            const dayNumber = format(date, 'd');
+          <View style={styles.grid}>
+            {visibleDays.map((date) => {
+              const iso = ISO(date);
+              const inMonth = isSameMonth(date, viewMonth);
+              const todayCell = isSameDay(date, today);
+              const data = getDayData
+                ? getDayData(iso)
+                : getMockDayData(
+                    iso,
+                    totalFriends,
+                    selectedGroupId === 'all' ? undefined : selectedGroupId
+                  );
+              const bg = getHeatmapColor(data.friendsInTown, data.totalFriends);
+              const dayNumber = format(date, 'd');
 
-            return (
-              <Pressable
-                key={iso}
-                onPress={() => handleDayPress(iso)}
-                style={({ pressed, hovered }: any) => [
-                  styles.cell,
-                  { backgroundColor: bg },
-                  !inMonth && styles.cellOutsideMonth,
-                  todayCell && styles.cellToday,
-                  (pressed || hovered) && styles.cellHover,
-                ]}
-              >
-                <Text style={styles.dayNumber}>{dayNumber}</Text>
-                {!isEmpty && (
-                  <Text style={styles.friendCount} numberOfLines={1}>
-                    {data.friendsInTown} in town
+              return (
+                <Pressable
+                  key={iso}
+                  onPress={() => handleDayPress(iso)}
+                  style={({ pressed, hovered }: any) => [
+                    styles.cell,
+                    { backgroundColor: bg },
+                    !inMonth && styles.cellOutsideMonth,
+                    todayCell && styles.cellToday,
+                    (pressed || hovered) && styles.cellHover,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.dayNumber,
+                      !inMonth && styles.dayNumberOutsideMonth,
+                    ]}
+                  >
+                    {dayNumber}
                   </Text>
-                )}
-              </Pressable>
-            );
-          })}
+                  {!isEmpty && (
+                    <Text style={styles.friendCount} numberOfLines={1}>
+                      {data.friendsInTown} in town
+                    </Text>
+                  )}
+                </Pressable>
+              );
+            })}
+          </View>
         </View>
 
-        {isEmpty && (
+        {isEmpty && shouldShowEmptyStatePrompt && (
           <View pointerEvents="box-none" style={styles.emptyOverlay}>
             <View style={styles.emptyCard}>
+              <Pressable
+                onPress={handleDismissEmptyState}
+                accessibilityLabel="Dismiss add friends popup"
+                accessibilityRole="button"
+                hitSlop={8}
+                style={({ pressed, hovered }: any) => [
+                  styles.emptyCloseButton,
+                  (pressed || hovered) && styles.emptyCloseButtonHover,
+                ]}
+              >
+                <Text style={styles.emptyCloseGlyph}>×</Text>
+              </Pressable>
               <View style={styles.emptyIllustration}>
                 <Text style={styles.emptyIllustrationGlyph}>🏠</Text>
               </View>
@@ -272,24 +305,27 @@ const styles = StyleSheet.create({
     color: colors.text.secondary,
   },
   monthLabel: {
-    fontFamily: fontFamilies.fraunces.semibold,
-    fontSize: typography.display.large.fontSize,
-    fontWeight: '600',
+    ...typography.calendar.month,
     color: colors.text.primary,
     minWidth: 280,
     textAlign: 'center',
   },
+  calendarFrame: {
+    backgroundColor: colors.background.card,
+    borderWidth: 1,
+    borderColor: colors.border.subtle,
+    borderRadius: radius.lg,
+    padding: spacing[3],
+    ...shadows.sm,
+  },
   weekdayRow: {
     flexDirection: 'row',
-    marginBottom: spacing[2],
+    marginBottom: spacing[3],
     gap: CELL_GAP,
   },
   weekdayLabel: {
     flex: 1,
-    fontFamily: fontFamilies.inter.medium,
-    fontSize: typography.label.fontSize,
-    fontWeight: '500',
-    letterSpacing: typography.label.letterSpacing,
+    ...typography.calendar.weekday,
     color: colors.text.tertiary,
     textAlign: 'center',
   },
@@ -305,11 +341,14 @@ const styles = StyleSheet.create({
     flexBasis: `${(100 - 6) / 7}%`,
     height: CELL_HEIGHT,
     borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border.subtle,
     padding: spacing[2],
     justifyContent: 'space-between',
+    ...shadows.sm,
   },
   cellOutsideMonth: {
-    opacity: 0.4,
+    backgroundColor: colors.background.secondary,
   },
   cellToday: {
     borderWidth: 2,
@@ -321,15 +360,14 @@ const styles = StyleSheet.create({
     ...shadows.md,
   },
   dayNumber: {
-    fontFamily: fontFamilies.inter.regular,
-    fontSize: typography.body.large.fontSize,
-    fontWeight: '500',
-    color: '#FFFFFF',
+    ...typography.calendar.dayNumber,
+    color: colors.text.primary,
+  },
+  dayNumberOutsideMonth: {
+    color: colors.text.secondary,
   },
   friendCount: {
-    fontFamily: fontFamilies.inter.regular,
-    fontSize: typography.caption.fontSize,
-    fontWeight: '400',
+    ...typography.calendar.meta,
     color: 'rgba(255, 255, 255, 0.85)',
     alignSelf: 'flex-end',
   },
@@ -346,7 +384,27 @@ const styles = StyleSheet.create({
     padding: spacing[5],
     maxWidth: 380,
     alignItems: 'center',
+    position: 'relative',
     ...shadows.lg,
+  },
+  emptyCloseButton: {
+    position: 'absolute',
+    top: spacing[3],
+    right: spacing[3],
+    width: 32,
+    height: 32,
+    borderRadius: radius.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyCloseButtonHover: {
+    backgroundColor: colors.background.secondary,
+  },
+  emptyCloseGlyph: {
+    fontSize: 24,
+    lineHeight: 24,
+    color: colors.text.secondary,
+    fontWeight: '500',
   },
   emptyIllustration: {
     width: 72,
