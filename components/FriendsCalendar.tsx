@@ -133,50 +133,59 @@ export default function FriendsCalendar({
           />
         </View>
 
-        <View style={styles.weekdayRow}>
-          {WEEKDAYS.map((day) => (
-            <Text key={day} style={styles.weekdayLabel}>
-              {day.toUpperCase()}
-            </Text>
-          ))}
-        </View>
+        <View style={styles.calendarFrame}>
+          <View style={styles.weekdayRow}>
+            {WEEKDAYS.map((day) => (
+              <Text key={day} style={styles.weekdayLabel}>
+                {day.toUpperCase()}
+              </Text>
+            ))}
+          </View>
 
-        <View style={styles.grid}>
-          {visibleDays.map((date) => {
-            const iso = ISO(date);
-            const inMonth = isSameMonth(date, viewMonth);
-            const todayCell = isSameDay(date, today);
-            const data = getDayData
-              ? getDayData(iso)
-              : getMockDayData(
-                  iso,
-                  totalFriends,
-                  selectedGroupId === 'all' ? undefined : selectedGroupId
-                );
-            const bg = getHeatmapColor(data.friendsInTown, data.totalFriends);
-            const dayNumber = format(date, 'd');
+          <View style={styles.grid}>
+            {visibleDays.map((date) => {
+              const iso = ISO(date);
+              const inMonth = isSameMonth(date, viewMonth);
+              const todayCell = isSameDay(date, today);
+              const data = getDayData
+                ? getDayData(iso)
+                : getMockDayData(
+                    iso,
+                    totalFriends,
+                    selectedGroupId === 'all' ? undefined : selectedGroupId
+                  );
+              const bg = getHeatmapColor(data.friendsInTown, data.totalFriends);
+              const dayNumber = format(date, 'd');
 
-            return (
-              <Pressable
-                key={iso}
-                onPress={() => handleDayPress(iso)}
-                style={({ pressed, hovered }: any) => [
-                  styles.cell,
-                  { backgroundColor: bg },
-                  !inMonth && styles.cellOutsideMonth,
-                  todayCell && styles.cellToday,
-                  (pressed || hovered) && styles.cellHover,
-                ]}
-              >
-                <Text style={styles.dayNumber}>{dayNumber}</Text>
-                {!isEmpty && (
-                  <Text style={styles.friendCount} numberOfLines={1}>
-                    {data.friendsInTown} in town
+              return (
+                <Pressable
+                  key={iso}
+                  onPress={() => handleDayPress(iso)}
+                  style={({ pressed, hovered }: any) => [
+                    styles.cell,
+                    { backgroundColor: bg },
+                    !inMonth && styles.cellOutsideMonth,
+                    todayCell && styles.cellToday,
+                    (pressed || hovered) && styles.cellHover,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.dayNumber,
+                      !inMonth && styles.dayNumberOutsideMonth,
+                    ]}
+                  >
+                    {dayNumber}
                   </Text>
-                )}
-              </Pressable>
-            );
-          })}
+                  {!isEmpty && (
+                    <Text style={styles.friendCount} numberOfLines={1}>
+                      {data.friendsInTown} in town
+                    </Text>
+                  )}
+                </Pressable>
+              );
+            })}
+          </View>
         </View>
 
         {isEmpty && !isEmptyStateDismissed && (
@@ -292,9 +301,17 @@ const styles = StyleSheet.create({
     minWidth: 280,
     textAlign: 'center',
   },
+  calendarFrame: {
+    backgroundColor: colors.background.card,
+    borderWidth: 1,
+    borderColor: colors.border.subtle,
+    borderRadius: radius.lg,
+    padding: spacing[3],
+    ...shadows.sm,
+  },
   weekdayRow: {
     flexDirection: 'row',
-    marginBottom: spacing[2],
+    marginBottom: spacing[3],
     gap: CELL_GAP,
   },
   weekdayLabel: {
@@ -318,11 +335,14 @@ const styles = StyleSheet.create({
     flexBasis: `${(100 - 6) / 7}%`,
     height: CELL_HEIGHT,
     borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border.subtle,
     padding: spacing[2],
     justifyContent: 'space-between',
+    ...shadows.sm,
   },
   cellOutsideMonth: {
-    opacity: 0.4,
+    backgroundColor: colors.background.secondary,
   },
   cellToday: {
     borderWidth: 2,
@@ -334,10 +354,14 @@ const styles = StyleSheet.create({
     ...shadows.md,
   },
   dayNumber: {
-    fontFamily: fontFamilies.inter.regular,
-    fontSize: typography.body.large.fontSize,
-    fontWeight: '500',
-    color: '#FFFFFF',
+    fontFamily: fontFamilies.inter.medium,
+    fontSize: typography.display.small.fontSize,
+    lineHeight: typography.display.small.lineHeight,
+    fontWeight: '600',
+    color: colors.text.primary,
+  },
+  dayNumberOutsideMonth: {
+    color: colors.text.secondary,
   },
   friendCount: {
     fontFamily: fontFamilies.inter.regular,
