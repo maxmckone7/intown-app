@@ -20,52 +20,19 @@ import {
   spacing,
   typography,
 } from '../theme';
-import { FriendWithStatus } from '../lib/types';
+import { CalendarEntry, FriendWithStatus } from '../lib/types';
 import { useReducedMotion } from '../lib/use-reduced-motion';
 
 type Props = {
   visible: boolean;
   /** ISO date (YYYY-MM-DD) — undefined when modal is closed */
   date: string | null;
-  /** Real friends list; mock statuses are layered on top per date */
+  /** Real friends list; availability is read from Supabase calendar entries. */
   friends: FriendWithStatus[];
+  calendarEntries?: CalendarEntry[];
   onClose: () => void;
   onMessage?: (friendId: string) => void;
 };
-
-// Mock status pool — TODO: replace with real per-friend availability
-// once the Supabase aggregation lands.
-const STATUS_OPTIONS = [
-  'Available all weekend',
-  'Just visiting',
-  'In town until Tuesday',
-  'Free Friday night',
-  'Around all week',
-  'Quick trip — hit me up',
-];
-
-/**
- * Deterministic FNV-style hash → number in [0, 1). Same input always
- * yields the same output so the same date+friend reuses its slot/status.
- */
-function hash(seed: string): number {
-  let h = 2166136261;
-  for (let i = 0; i < seed.length; i += 1) {
-    h ^= seed.charCodeAt(i);
-    h = Math.imul(h, 16777619);
-  }
-  return ((h >>> 0) % 10000) / 10000;
-}
-
-function inTownForDate(friendId: string, isoDate: string): boolean {
-  // ~55% of friends are in town for any given day, deterministic per pair
-  return hash(`${friendId}|${isoDate}`) > 0.45;
-}
-
-function statusForDate(friendId: string, isoDate: string): string {
-  const idx = Math.floor(hash(`status|${friendId}|${isoDate}`) * STATUS_OPTIONS.length);
-  return STATUS_OPTIONS[Math.min(idx, STATUS_OPTIONS.length - 1)];
-}
 
 function formatHeaderDate(isoDate: string): string {
   return format(new Date(`${isoDate}T00:00:00`), 'EEEE, MMM d');
@@ -75,6 +42,7 @@ export default function DayDetailModal({
   visible,
   date,
   friends,
+  calendarEntries = [],
   onClose,
   onMessage,
 }: Props) {
@@ -124,10 +92,16 @@ export default function DayDetailModal({
 
   const inTownFriends = useMemo(() => {
     if (!date) return [];
+    const statuses = new Map(
+      calendarEntries
+        .filter((entry) => entry.date === date)
+        .map((entry) => [entry.user_id, entry.status])
+    );
+
     return friends
-      .filter((f) => inTownForDate(f.id, date))
-      .map((f) => ({ friend: f, status: statusForDate(f.id, date) }));
-  }, [date, friends]);
+      .filter((friend) => statuses.get(friend.id) !== 'out_of_town')
+      .map((friend) => ({ friend, status: 'In town' }));
+  }, [calendarEntries, date, friends]);
 
   if (!date) return null;
 

@@ -2,15 +2,26 @@ import 'react-native-url-polyfill/auto';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
-const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+const PLACEHOLDER_PATTERNS = ['your-project', 'your-anon-key'];
 
-const hasSupabaseConfig = Boolean(
-  supabaseUrl &&
-  supabaseAnonKey &&
-  !supabaseUrl.includes('your-project') &&
-  !supabaseAnonKey.includes('your-anon-key')
-);
+const readSupabaseEnv = (value: string | undefined): string | undefined => {
+  const trimmed = value?.trim();
+
+  if (
+    !trimmed ||
+    PLACEHOLDER_PATTERNS.some((placeholder) => trimmed.includes(placeholder))
+  ) {
+    return undefined;
+  }
+
+  return trimmed;
+};
+
+const supabaseUrl = readSupabaseEnv(process.env.EXPO_PUBLIC_SUPABASE_URL);
+const supabaseAnonKey = readSupabaseEnv(process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY);
+
+const hasSupabaseConfig = Boolean(supabaseUrl && supabaseAnonKey);
+
 
 // Mock Supabase client using AsyncStorage
 class MockSupabaseClient {

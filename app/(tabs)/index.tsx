@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   View,
   StyleSheet,
@@ -7,11 +7,19 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { authService } from '../../services/auth';
+import { calendarService } from '../../services/calendar';
+import { friendGroupsService } from '../../services/friendGroups';
 import { friendsService } from '../../services/friends';
 import { addFriendsPromptService } from '../../services/addFriendsPrompt';
-import { FriendWithStatus } from '../../lib/types';
+import {
+  CalendarEntry,
+  CalendarStatus,
+  FriendGroup,
+  FriendWithStatus,
+} from '../../lib/types';
 import InviteFriends from '../../components/InviteFriends';
 import FriendsCalendar from '../../components/FriendsCalendar';
+import { FilterGroup } from '../../components/GroupFilter';
 import DayDetailModal from '../../components/DayDetailModal';
 import { CalendarSkeleton } from '../../components/Skeleton';
 import { colors } from '../../theme';
@@ -20,6 +28,10 @@ export default function FriendsCalendarScreen() {
   const router = useRouter();
   const [userId, setUserId] = useState<string | null>(null);
   const [friends, setFriends] = useState<FriendWithStatus[]>([]);
+  const [friendGroups, setFriendGroups] = useState<FriendGroup[]>([]);
+  const [friendEntries, setFriendEntries] = useState<
+    Array<CalendarEntry & { friend_name: string; friend_id: string }>
+  >([]);
   const [loading, setLoading] = useState(true);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [showAddFriendsPrompt, setShowAddFriendsPrompt] = useState(false);
@@ -37,11 +49,15 @@ export default function FriendsCalendarScreen() {
         return;
       }
       setUserId(user.id);
-      const [friendsList, shouldShowPrompt] = await Promise.all([
+      const [friendsList, groupsList, entriesList, shouldShowPrompt] = await Promise.all([
         friendsService.getFriends(user.id),
+        friendGroupsService.getGroups(user.id),
+        calendarService.getFriendsEntries(user.id),
         addFriendsPromptService.shouldShow(user.id),
       ]);
       setFriends(friendsList);
+      setFriendGroups(groupsList);
+      setFriendEntries(entriesList);
       setShowAddFriendsPrompt(shouldShowPrompt);
     } catch (error: any) {
       Alert.alert('Error', error.message || 'Failed to load friends');
@@ -62,6 +78,51 @@ export default function FriendsCalendarScreen() {
     router.push('/(tabs)/friends');
   };
 
+  const groups = useMemo<FilterGroup[]>(
+    () =>
+      friendGroups.map((group) => ({
+        id: group.id,
+        label: group.name,
+        friendIds: group.friend_ids,
+      })),
+    [friendGroups]
+  );
+
+  const allFriendIds = useMemo(() => friends.map((friend) => friend.id), [friends]);
+
+  const statusesByDate = useMemo(() => {
+    const byDate = new Map<string, Map<string, CalendarStatus>>();
+
+    for (const entry of friendEntries) {
+      if (!byDate.has(entry.date)) {
+        byDate.set(entry.date, new Map<string, CalendarStatus>());
+      }
+      byDate.get(entry.date)!.set(entry.user_id, entry.status);
+    }
+
+    return byDate;
+  }, [friendEntries]);
+
+  const getDayData = useCallback(
+    (isoDate: string, groupId: string) => {
+      const groupFriendIds =
+        groupId === 'all'
+          ? allFriendIds
+          : groups.find((group) => group.id === groupId)?.friendIds ?? [];
+      const dayStatuses = statusesByDate.get(isoDate);
+      const friendsInTown = groupFriendIds.filter(
+        (friendId) => dayStatuses?.get(friendId) !== 'out_of_town'
+      ).length;
+
+      return {
+        date: isoDate,
+        friendsInTown,
+        totalFriends: groupFriendIds.length,
+      };
+    },
+    [allFriendIds, groups, statusesByDate]
+  );
+
   if (loading) {
     return (
       <View style={styles.container}>
@@ -78,6 +139,8 @@ export default function FriendsCalendarScreen() {
       >
         <FriendsCalendar
           totalFriends={friends.length}
+          groups={groups}
+          getDayData={getDayData}
           onDayPress={(iso) => setSelectedDate(iso)}
           onAddFriendsPress={handleAddFriendsPress}
           showEmptyStatePrompt={showAddFriendsPrompt}
@@ -91,6 +154,7 @@ export default function FriendsCalendarScreen() {
         visible={selectedDate !== null}
         date={selectedDate}
         friends={friends}
+        calendarEntries={friendEntries}
         onClose={() => setSelectedDate(null)}
       />
     </>

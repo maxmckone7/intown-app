@@ -10,19 +10,15 @@ import {
 export type FilterGroup = {
   id: string;
   label: string;
+  friendIds?: string[];
 };
 
 /**
- * Default groups shown when no real groups have been created yet.
  * The "all" pseudo-group is always first and selected by default.
- * Mock entries are placeholders — DES-19 wires real groups via the
- * Groups management UI.
+ * User-created groups are loaded from the friend_groups table.
  */
 export const DEFAULT_GROUPS: FilterGroup[] = [
   { id: 'all', label: 'All friends' },
-  { id: 'close-friends', label: 'Close friends' },
-  { id: 'nyc-crew', label: 'NYC crew' },
-  { id: 'college', label: 'College' },
 ];
 
 type Props = {
