@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { authService } from '../../services/auth';
+import BrandLogo from '../../components/BrandLogo';
 
 // Web-compatible alert function
 const showAlert = (title: string, message: string) => {
@@ -184,9 +185,7 @@ export default function LoginScreen() {
         </Animated.View>
 
         <View style={styles.formCard}>
-          <View style={styles.logoBurst}>
-            <Text style={styles.logoText}>InTown</Text>
-          </View>
+          <BrandLogo style={styles.logo} />
           <Text style={styles.title}>Welcome back</Text>
           <Text style={styles.subtitle}>Sign in and find the brightest plans nearby.</Text>
 
@@ -396,22 +395,9 @@ const styles = StyleSheet.create({
     shadowRadius: 30,
     elevation: 8,
   },
-  logoBurst: {
+  logo: {
     alignSelf: 'center',
-    paddingHorizontal: 24,
-    paddingVertical: 10,
-    borderRadius: 22,
     marginBottom: 18,
-    backgroundColor: '#fff0a8',
-    borderWidth: 2,
-    borderColor: '#ff8a00',
-    transform: [{ rotate: '-2deg' }],
-  },
-  logoText: {
-    fontSize: 30,
-    fontWeight: '900',
-    color: '#ff2d55',
-    letterSpacing: 0.5,
   },
   title: {
     fontSize: 34,

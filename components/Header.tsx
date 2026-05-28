@@ -12,6 +12,7 @@ import { authService } from '../services/auth';
 import { supabase } from '../lib/supabase';
 import { User } from '../lib/types';
 import { colors, fontFamilies, spacing } from '../theme';
+import BrandLogo from './BrandLogo';
 
 const HEADER_HEIGHT = 72;
 
@@ -79,8 +80,7 @@ export default function Header() {
             (pressed || hovered) && styles.logoHover,
           ]}
         >
-          <Text style={styles.logoText}>InTown</Text>
-          <View style={styles.logoUnderline} />
+          <BrandLogo />
         </Pressable>
 
         <View style={styles.nav}>
@@ -156,20 +156,6 @@ const styles = StyleSheet.create({
   },
   logoHover: {
     opacity: 0.8,
-  },
-  logoText: {
-    fontSize: 28,
-    fontWeight: '900',
-    color: colors.brand.primary,
-    letterSpacing: 0.5,
-    lineHeight: 32,
-  },
-  logoUnderline: {
-    height: 3,
-    width: '100%',
-    borderRadius: 2,
-    marginTop: 2,
-    backgroundColor: '#ffd60a',
   },
   nav: {
     flexDirection: 'row',
