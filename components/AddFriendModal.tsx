@@ -28,6 +28,7 @@ import {
 import Button from './Button';
 import { useReducedMotion } from '../lib/use-reduced-motion';
 import { useToast } from './ToastProvider';
+import { createInviteLink } from '../lib/invite';
 
 type Props = {
   visible: boolean;
@@ -41,9 +42,6 @@ type InviteContact = {
   email?: string;
   phone?: string;
 };
-
-const createInviteLink = () =>
-  `https://intown.app/invite/${Math.random().toString(36).slice(2, 11)}`;
 
 const firstContactEmail = (emails?: Contacts.Email[]) =>
   emails?.find((email) => Boolean(email.email))?.email;
