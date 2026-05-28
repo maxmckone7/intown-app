@@ -395,9 +395,7 @@ const styles = StyleSheet.create({
     color: colors.text.secondary,
   },
   monthLabel: {
-    fontFamily: fontFamilies.fraunces.semibold,
-    fontSize: typography.display.large.fontSize,
-    fontWeight: '600',
+    ...typography.calendar.month,
     color: colors.text.primary,
     minWidth: 280,
     textAlign: 'center',
@@ -417,10 +415,7 @@ const styles = StyleSheet.create({
   },
   weekdayLabel: {
     flex: 1,
-    fontFamily: fontFamilies.inter.medium,
-    fontSize: typography.label.fontSize,
-    fontWeight: '500',
-    letterSpacing: typography.label.letterSpacing,
+    ...typography.calendar.weekday,
     color: colors.text.tertiary,
     textAlign: 'center',
   },
@@ -468,21 +463,15 @@ const styles = StyleSheet.create({
     transform: [{ scale: 0.95 }],
   },
   dayNumber: {
-    fontFamily: fontFamilies.inter.medium,
-    fontSize: typography.display.small.fontSize,
-    lineHeight: typography.display.small.lineHeight,
-    fontWeight: '600',
+    ...typography.calendar.dayNumber,
     color: colors.text.primary,
   },
   dayNumberOutsideMonth: {
     color: colors.text.secondary,
   },
   statusLabel: {
-    fontFamily: fontFamilies.inter.medium,
-    fontSize: typography.caption.fontSize,
-    fontWeight: '500',
+    ...typography.calendar.meta,
     color: 'rgba(255, 255, 255, 0.9)',
     alignSelf: 'flex-end',
-    letterSpacing: 0.3,
   },
 });
