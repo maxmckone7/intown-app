@@ -26,6 +26,7 @@ const showAlert = (title: string, message: string) => {
 
 type SignUpAuthResult = {
   user?: { id?: string } | null;
+  session?: unknown | null;
   isNewUser?: boolean;
 };
 
@@ -34,6 +35,7 @@ export default function SignUpScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [pendingVerificationEmail, setPendingVerificationEmail] = useState<string | null>(null);
   const router = useRouter();
 
   const markAddFriendsPromptEligible = async (
@@ -60,7 +62,15 @@ export default function SignUpScreen() {
     try {
       const result = await authService.signUp(email, password, name);
       await markAddFriendsPromptEligible(result, true);
-      showAlert('Success', 'Account created!');
+
+      // Supabase returns a session immediately only if email confirmation is
+      // disabled. With confirmation enabled, session is null until the user
+      // clicks the verification link, so we stop here and tell them.
+      if (!result?.session) {
+        setPendingVerificationEmail(email);
+        return;
+      }
+
       if (Platform.OS === 'web') {
         router.push('/(tabs)');
       } else {
@@ -104,6 +114,32 @@ export default function SignUpScreen() {
       setLoading(false);
     }
   };
+
+  if (pendingVerificationEmail) {
+    return (
+      <KeyboardAvoidingView
+        style={styles.container}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
+        <View style={styles.content}>
+          <Text style={styles.title}>Check your email</Text>
+          <Text style={styles.subtitle}>
+            We sent a verification link to{'\n'}
+            <Text style={styles.linkTextBold}>{pendingVerificationEmail}</Text>
+            {'\n\n'}
+            Tap the link on this device to finish creating your account.
+          </Text>
+          <Button
+            label="Back to Sign In"
+            variant="secondary"
+            onPress={() => router.replace('/(auth)/login')}
+            fullWidth
+            style={styles.primaryButton}
+          />
+        </View>
+      </KeyboardAvoidingView>
+    );
+  }
 
   return (
     <KeyboardAvoidingView

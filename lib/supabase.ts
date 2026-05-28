@@ -580,8 +580,33 @@ class MockQueryBuilder {
   }
 }
 
-// Export Supabase client with mock fallback for local development without env vars.
+// Refuses every auth/db call with a fixed error. Used when Supabase env is
+// missing in a non-dev build, so the app fails closed instead of minting
+// fake "mock_token_*" sessions that anyone could sign in with.
+const createUnavailableAuthClient = (reason: string) => ({
+  auth: {
+    getSession: async () => ({ data: { session: null }, error: null }),
+    signUp: async () => ({ data: null, error: { message: reason } }),
+    signInWithPassword: async () => ({ data: null, error: { message: reason } }),
+    resetPasswordForEmail: async () => ({ data: null, error: { message: reason } }),
+    exchangeCodeForSession: async () => ({ data: null, error: { message: reason } }),
+    updateUser: async () => ({ data: null, error: { message: reason } }),
+    signOut: async () => ({ error: null }),
+    getUser: async () => ({ data: { user: null }, error: null }),
+    signInWithOAuth: async () => ({ data: null, error: { message: reason } }),
+    onAuthStateChange: () => ({ data: { subscription: { unsubscribe: () => {} } } }),
+  },
+  from: () => ({
+    select: () => ({
+      then: (resolve: any) => resolve({ data: [], error: { message: reason } }),
+    }),
+  }),
+});
+
+// Export Supabase client. Real Supabase when env is set; in-memory mock for
+// dev when env is missing; fail-closed client in non-dev when env is missing.
 let supabaseInstance: any;
+let usingMockClient = false;
 
 if (hasSupabaseConfig) {
   supabaseInstance = createClient(supabaseUrl!, supabaseAnonKey!, {
@@ -592,31 +617,24 @@ if (hasSupabaseConfig) {
       detectSessionInUrl: false,
     },
   });
-} else {
+} else if (__DEV__) {
   try {
     supabaseInstance = new MockSupabaseClient();
+    usingMockClient = true;
   } catch (error) {
     console.error('Failed to create Supabase mock client:', error);
-    // Create a minimal fallback
-    supabaseInstance = {
-      auth: {
-        getSession: async () => ({ data: { session: null }, error: null }),
-        signUp: async () => ({ data: null, error: { message: 'Not initialized' } }),
-        signInWithPassword: async () => ({ data: null, error: { message: 'Not initialized' } }),
-        resetPasswordForEmail: async () => ({ data: null, error: { message: 'Not initialized' } }),
-        exchangeCodeForSession: async () => ({ data: null, error: { message: 'Not initialized' } }),
-        updateUser: async () => ({ data: null, error: { message: 'Not initialized' } }),
-        signOut: async () => ({ error: null }),
-        getUser: async () => ({ data: { user: null }, error: null }),
-        signInWithOAuth: async () => ({ data: null, error: { message: 'Not initialized' } }),
-        onAuthStateChange: () => ({ data: { subscription: { unsubscribe: () => {} } } }),
-      },
-      from: () => ({
-        select: () => ({ then: (resolve: any) => resolve({ data: [], error: null }) }),
-      }),
-    };
+    supabaseInstance = createUnavailableAuthClient('Mock auth client failed to initialize.');
   }
+} else {
+  console.error(
+    '[InTown] Supabase credentials are missing in a non-dev build. ' +
+    'Set EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY before building for production. ' +
+    'All authentication requests will be rejected.',
+  );
+  supabaseInstance = createUnavailableAuthClient(
+    'Authentication is not available in this build. Please contact support.',
+  );
 }
 
 export const supabase = supabaseInstance;
-export const isMockSupabase = !hasSupabaseConfig;
+export const isMockSupabase = usingMockClient;
