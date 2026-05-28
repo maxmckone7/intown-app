@@ -15,6 +15,7 @@ import {
 import { useRouter } from 'expo-router';
 import { authService } from '../../services/auth';
 import BrandLogo from '../../components/BrandLogo';
+import { colors } from '../../theme';
 
 // Web-compatible alert function
 const showAlert = (title: string, message: string) => {
@@ -231,11 +232,6 @@ export default function LoginScreen() {
             disabled={loading}
             activeOpacity={0.7}
           >
-            <View style={styles.buttonRainbow} pointerEvents="none">
-              {['#ff2d55', '#ff9500', '#ffd60a', '#34c759', '#00a8ff', '#8e5cff'].map((color) => (
-                <View key={color} style={[styles.buttonStripe, { backgroundColor: color }]} />
-              ))}
-            </View>
             {loading ? (
               <ActivityIndicator color="#fff" style={styles.buttonContent} />
             ) : (
@@ -428,7 +424,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 8,
     overflow: 'hidden',
-    shadowColor: '#ff3d7f',
+    backgroundColor: colors.brand.primary,
+    shadowColor: colors.brand.primary,
     shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.28,
     shadowRadius: 14,
@@ -447,13 +444,6 @@ const styles = StyleSheet.create({
   },
   buttonDisabled: {
     opacity: 0.6,
-  },
-  buttonRainbow: {
-    ...StyleSheet.absoluteFillObject,
-    flexDirection: 'row',
-  },
-  buttonStripe: {
-    flex: 1,
   },
   buttonContent: {
     zIndex: 1,
