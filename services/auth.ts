@@ -16,6 +16,7 @@ export type AuthUser = SupabaseUser & {
 
 const OAUTH_REDIRECT_PATH = 'auth/callback';
 const PASSWORD_RESET_REDIRECT_PATH = 'auth/reset-password';
+const EMAIL_VERIFICATION_REDIRECT_PATH = 'auth/callback';
 
 const getOAuthRedirectUrl = () =>
   AuthSession.makeRedirectUri({
@@ -28,6 +29,13 @@ const getPasswordResetRedirectUrl = () =>
   AuthSession.makeRedirectUri({
     scheme: 'intown',
     path: PASSWORD_RESET_REDIRECT_PATH,
+    isTripleSlashed: true,
+  });
+
+const getEmailVerificationRedirectUrl = () =>
+  AuthSession.makeRedirectUri({
+    scheme: 'intown',
+    path: EMAIL_VERIFICATION_REDIRECT_PATH,
     isTripleSlashed: true,
   });
 
@@ -125,6 +133,7 @@ export const authService = {
         data: {
           name,
         },
+        emailRedirectTo: getEmailVerificationRedirectUrl(),
       },
     });
 
