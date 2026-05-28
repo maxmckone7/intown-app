@@ -181,7 +181,7 @@ export default function LoginScreen() {
 
       <View style={styles.content}>
         <Animated.View style={[styles.heroBadge, glowStyle]}>
-          <Text style={styles.heroBadgeText}>Meet your city in color</Text>
+          <Text style={styles.heroBadgeText}>Know who's around.</Text>
         </Animated.View>
 
         <View style={styles.formCard}>
@@ -378,7 +378,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '800',
     letterSpacing: 0.4,
-    textTransform: 'uppercase',
   },
   formCard: {
     width: '100%',
