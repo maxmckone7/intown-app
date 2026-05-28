@@ -10,9 +10,11 @@ import {
   View,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
+import { format } from 'date-fns';
 import { authService } from '../../services/auth';
+import { calendarService } from '../../services/calendar';
 import { friendsService } from '../../services/friends';
-import { FriendWithStatus } from '../../lib/types';
+import { CalendarStatus, FriendWithStatus } from '../../lib/types';
 import Button from '../../components/Button';
 import AddFriendModal from '../../components/AddFriendModal';
 import InviteFriends from '../../components/InviteFriends';
@@ -25,7 +27,7 @@ import {
   typography,
 } from '../../theme';
 
-type FriendStatusState = 'in_town' | 'away' | 'returning_soon';
+type FriendStatusState = 'in_town' | 'away';
 
 type FriendStatus = {
   state: FriendStatusState;
@@ -33,61 +35,14 @@ type FriendStatus = {
   pillLabel: string; // e.g. "In Town"
 };
 
-const STATUS_TEXTS: Record<FriendStatusState, string[]> = {
-  in_town: [
-    'In town until June 3rd',
-    'Around all week',
-    'Available all weekend',
-    'Free Friday night',
-  ],
-  away: [
-    'Away through next week',
-    'Out of town until Sunday',
-    'Traveling this weekend',
-    'Back next Friday',
-  ],
-  returning_soon: [
-    'Returning Wednesday',
-    'Back this weekend',
-    'In town Thursday',
-    'Home by Friday',
-  ],
-};
-
-const PILL_LABELS: Record<FriendStatusState, string> = {
-  in_town: 'In Town',
-  away: 'Away',
-  returning_soon: 'Returning soon',
-};
-
-// Deterministic FNV-style hash so the same friend keeps the same status
-// between renders. TODO: replace with real availability aggregated from
-// Supabase calendar entries.
-function hash(seed: string): number {
-  let h = 2166136261;
-  for (let i = 0; i < seed.length; i += 1) {
-    h ^= seed.charCodeAt(i);
-    h = Math.imul(h, 16777619);
-  }
-  return (h >>> 0) % 10000;
-}
-
-function mockStatusFor(friendId: string): FriendStatus {
-  const states: FriendStatusState[] = ['in_town', 'away', 'returning_soon'];
-  const state = states[hash(`state|${friendId}`) % states.length];
-  const pool = STATUS_TEXTS[state];
-  const label = pool[hash(`label|${friendId}`) % pool.length];
-  return { state, label, pillLabel: PILL_LABELS[state] };
-}
-
 const STATUS_COLORS: Record<FriendStatusState, { text: string; bg: string }> = {
   in_town: { text: '#4D6A50', bg: 'rgba(134, 167, 137, 0.2)' },
   away: { text: '#8A3B32', bg: 'rgba(196, 90, 77, 0.18)' },
-  returning_soon: { text: '#7A5A0F', bg: 'rgba(232, 197, 71, 0.25)' },
 };
 
 export default function FriendsScreen() {
   const [friends, setFriends] = useState<FriendWithStatus[]>([]);
+  const [todayStatuses, setTodayStatuses] = useState<Record<string, CalendarStatus>>({});
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchFocused, setSearchFocused] = useState(false);
@@ -104,8 +59,18 @@ export default function FriendsScreen() {
         Alert.alert('Error', 'Not authenticated');
         return;
       }
-      const list = await friendsService.getFriends(user.id);
+      const today = format(new Date(), 'yyyy-MM-dd');
+      const [list, entries] = await Promise.all([
+        friendsService.getFriends(user.id),
+        calendarService.getFriendsEntries(user.id, today, today),
+      ]);
       setFriends(list);
+      setTodayStatuses(
+        entries.reduce<Record<string, CalendarStatus>>((statuses, entry) => {
+          statuses[entry.user_id] = entry.status;
+          return statuses;
+        }, {})
+      );
     } catch (error: any) {
       Alert.alert('Error', error.message || 'Failed to load friends');
     } finally {
@@ -114,8 +79,20 @@ export default function FriendsScreen() {
   };
 
   const friendsWithStatus = useMemo(
-    () => friends.map((f) => ({ friend: f, status: mockStatusFor(f.id) })),
-    [friends]
+    () =>
+      friends.map((friend) => {
+        const status = todayStatuses[friend.id];
+        const isAway = status === 'out_of_town';
+        return {
+          friend,
+          status: {
+            state: isAway ? 'away' : 'in_town',
+            label: isAway ? 'Away today' : 'In town today',
+            pillLabel: isAway ? 'Away' : 'In Town',
+          } satisfies FriendStatus,
+        };
+      }),
+    [friends, todayStatuses]
   );
 
   const inTownThisWeek = useMemo(

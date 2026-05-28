@@ -1,4 +1,4 @@
-import { supabase, isMockSupabase } from '../lib/supabase';
+import { supabase } from '../lib/supabase';
 import * as AuthSession from 'expo-auth-session';
 import * as WebBrowser from 'expo-web-browser';
 import { Session, User as SupabaseUser } from '@supabase/supabase-js';
@@ -82,17 +82,6 @@ const completeOAuthSignIn = async (provider: 'google' | 'apple') => {
   });
 
   if (error) throw error;
-
-  // Without real Supabase credentials the mock client signs the user in inline
-  // and returns the session directly, bypassing the browser-based OAuth flow.
-  if (isMockSupabase && data?.mocked) {
-    await ensureUserProfile(data.user);
-    return {
-      user: data.user,
-      session: data.session,
-      isNewUser: data.isNewUser ?? isLikelyNewAuthUser(data.user),
-    };
-  }
 
   if (!data?.url) {
     throw new Error(`${provider} sign-in did not return an OAuth URL.`);

@@ -61,9 +61,12 @@ This will create:
 - `users` table
 - `friendships` table
 - `calendar_entries` table
+- `friend_groups` table
+- `invites` table
 - All necessary indexes
 - Row Level Security (RLS) policies
-- Triggers for automatic user profile creation
+- Triggers for automatic user profile creation and `updated_at` maintenance
+- RPC helpers such as `accept_invite`
 
 ## Step 6: Configure Authentication (Optional but Recommended)
 
@@ -117,6 +120,7 @@ npm start
 - Verify your `.env` file has the correct credentials
 - Make sure the `.env` file is in the root directory
 - Restart the Expo server after changing `.env`
+- The app requires real Supabase credentials and no longer falls back to browser-local mock data
 
 ### Database errors
 - Make sure you ran the SQL schema script

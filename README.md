@@ -129,6 +129,8 @@ social-calendar-app/
 - **users**: User profiles (extends Supabase auth.users)
 - **friendships**: Friend relationships between users
 - **calendar_entries**: User calendar entries (in town/out of town)
+- **friend_groups**: User-owned friend group filters
+- **invites**: Backend-backed invite links and acceptance state
 
 All tables have Row Level Security (RLS) enabled for data protection.
 

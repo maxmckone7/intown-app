@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import ContactsPickerModal, { SelectedContact } from './ContactsPickerModal';
-import { createInviteLink } from '../lib/invite';
+import { invitesService } from '../services/invites';
 
 type InviteFriendsProps = {
   variant?: 'card' | 'compact';
@@ -22,33 +22,37 @@ export default function InviteFriends({ variant = 'card' }: InviteFriendsProps) 
   const [inviteLink, setInviteLink] = useState('');
   const [copied, setCopied] = useState(false);
   const [pickerVisible, setPickerVisible] = useState(false);
+  const [inviteLoading, setInviteLoading] = useState(false);
 
-  const ensureLink = (): string => {
+  const ensureLink = async (): Promise<string | null> => {
     if (inviteLink) return inviteLink;
-    const mockLink = `https://intown.app/invite/${Math.random().toString(36).slice(2, 11)}`;
-    setInviteLink(mockLink);
-  // Generate mock invite link (stub for now)
-  const generateInviteLink = () => {
-    // TODO: Replace with real invite link generation from API
-    setInviteLink(createInviteLink());
-    setCopied(false);
-    return mockLink;
+
+    setInviteLoading(true);
+    try {
+      const link = await invitesService.createInviteLink();
+      setInviteLink(link);
+      return link;
+    } catch (error: any) {
+      Alert.alert('Error', error?.message || 'Failed to create invite link');
+      return null;
+    } finally {
+      setInviteLoading(false);
+    }
   };
 
-  // Generate mock invite link (stub for now)
-  const generateInviteLink = () => {
-    // TODO: Replace with real invite link generation from API
-    ensureLink();
+  const generateInviteLink = async () => {
+    await ensureLink();
+    setCopied(false);
   };
+
+  const getShareLink = async () => ensureLink();
 
   const copyToClipboard = async () => {
-    if (!inviteLink) {
-      generateInviteLink();
-      return;
-    }
+    const link = await getShareLink();
+    if (!link) return;
 
     try {
-      await Clipboard.setStringAsync(inviteLink);
+      await Clipboard.setStringAsync(link);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch (error) {
@@ -56,13 +60,11 @@ export default function InviteFriends({ variant = 'card' }: InviteFriendsProps) 
     }
   };
 
-  const shareViaSMS = () => {
-    if (!inviteLink) {
-      generateInviteLink();
-      return;
-    }
+  const shareViaSMS = async () => {
+    const link = await getShareLink();
+    if (!link) return;
 
-    const message = `Join me on InTown! ${inviteLink}`;
+    const message = `Join me on InTown! ${link}`;
     const url = Platform.OS === 'ios' 
       ? `sms:&body=${encodeURIComponent(message)}`
       : `sms:?body=${encodeURIComponent(message)}`;
@@ -72,14 +74,12 @@ export default function InviteFriends({ variant = 'card' }: InviteFriendsProps) 
     });
   };
 
-  const shareViaEmail = () => {
-    if (!inviteLink) {
-      generateInviteLink();
-      return;
-    }
+  const shareViaEmail = async () => {
+    const link = await getShareLink();
+    if (!link) return;
 
     const subject = 'Join me on InTown!';
-    const body = `Check out InTown - a social calendar app! Join me: ${inviteLink}`;
+    const body = `Check out InTown - a social calendar app! Join me: ${link}`;
     const url = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
 
     Linking.openURL(url).catch(() => {
@@ -88,7 +88,9 @@ export default function InviteFriends({ variant = 'card' }: InviteFriendsProps) 
   };
 
   const shareToSocial = async () => {
-    const link = ensureLink();
+    const link = await getShareLink();
+    if (!link) return;
+
     try {
       await Share.share({
         message: `Join me on InTown! ${link}`,
@@ -100,9 +102,11 @@ export default function InviteFriends({ variant = 'card' }: InviteFriendsProps) 
     }
   };
 
-  const handlePickedContacts = (picked: SelectedContact[]) => {
+  const handlePickedContacts = async (picked: SelectedContact[]) => {
     setPickerVisible(false);
-    const link = ensureLink();
+    const link = await getShareLink();
+    if (!link) return;
+
     const message = `Join me on InTown! ${link}`;
 
     const phones = picked.map((c) => c.phoneNumber).filter((p): p is string => Boolean(p));
@@ -140,8 +144,11 @@ export default function InviteFriends({ variant = 'card' }: InviteFriendsProps) 
           <TouchableOpacity
             style={styles.compactButton}
             onPress={generateInviteLink}
+            disabled={inviteLoading}
           >
-            <Text style={styles.compactButtonText}>Invite friends</Text>
+            <Text style={styles.compactButtonText}>
+              {inviteLoading ? 'Creating invite...' : 'Invite friends'}
+            </Text>
           </TouchableOpacity>
         ) : (
           <>
@@ -197,8 +204,11 @@ export default function InviteFriends({ variant = 'card' }: InviteFriendsProps) 
         <TouchableOpacity
           style={styles.generateButton}
           onPress={generateInviteLink}
+          disabled={inviteLoading}
         >
-          <Text style={styles.buttonText}>Generate</Text>
+          <Text style={styles.buttonText}>
+            {inviteLoading ? 'Generating...' : 'Generate'}
+          </Text>
         </TouchableOpacity>
       </View>
 
