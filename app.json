@@ -31,7 +31,13 @@
       "bundler": "metro"
     },
     "plugins": [
-      "expo-router"
+      "expo-router",
+      [
+        "expo-contacts",
+        {
+          "contactsPermission": "Allow InTown to access your contacts so you can invite friends."
+        }
+      ]
     ]
   }
 }
