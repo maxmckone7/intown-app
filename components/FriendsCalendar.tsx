@@ -28,17 +28,15 @@ import {
 } from '../theme';
 import {
   getHeatmapColor,
-  getMockDayData,
   HeatmapDayData,
 } from '../lib/heatmap';
 import Button from './Button';
-import GroupFilter, { DEFAULT_GROUPS } from './GroupFilter';
+import GroupFilter, { DEFAULT_GROUPS, FilterGroup } from './GroupFilter';
 
 type Props = {
   totalFriends: number;
-  /** Optional override — pass real aggregated data per ISO date once
-   *  the Supabase query lands. Mock data is used when undefined. */
-  getDayData?: (isoDate: string) => HeatmapDayData;
+  groups?: FilterGroup[];
+  getDayData?: (isoDate: string, groupId: string) => HeatmapDayData;
   onDayPress?: (isoDate: string) => void;
   onAddFriendsPress?: () => void;
   showEmptyStatePrompt?: boolean;
@@ -50,6 +48,7 @@ const ISO = (d: Date) => format(d, 'yyyy-MM-dd');
 
 export default function FriendsCalendar({
   totalFriends,
+  groups = [],
   getDayData,
   onDayPress,
   onAddFriendsPress,
@@ -61,6 +60,17 @@ export default function FriendsCalendar({
   const [selectedGroupId, setSelectedGroupId] = useState<string>('all');
   const [isEmptyStateDismissed, setIsEmptyStateDismissed] = useState(false);
 
+  const filterGroups = useMemo(
+    () => [...DEFAULT_GROUPS, ...groups],
+    [groups]
+  );
+
+  const selectedGroup = filterGroups.find((group) => group.id === selectedGroupId);
+  const selectedTotalFriends =
+    selectedGroupId === 'all'
+      ? totalFriends
+      : selectedGroup?.friendIds?.length ?? 0;
+
   const visibleDays = useMemo(() => {
     const gridStart = startOfWeek(startOfMonth(viewMonth), { weekStartsOn: 0 });
     const gridEnd = endOfWeek(endOfMonth(viewMonth), { weekStartsOn: 0 });
@@ -71,7 +81,7 @@ export default function FriendsCalendar({
   const goNext = () => setViewMonth((d) => addMonths(d, 1));
   const goToday = () => setViewMonth(startOfMonth(today));
 
-  const isEmpty = totalFriends <= 0;
+  const isEmpty = selectedTotalFriends <= 0;
   const shouldShowEmptyStatePrompt =
     showEmptyStatePrompt ?? !isEmptyStateDismissed;
 
@@ -131,7 +141,7 @@ export default function FriendsCalendar({
 
         <View style={styles.filterRow}>
           <GroupFilter
-            groups={DEFAULT_GROUPS}
+            groups={filterGroups}
             selectedGroupId={selectedGroupId}
             onSelect={setSelectedGroupId}
             onManagePress={() => {
@@ -159,12 +169,8 @@ export default function FriendsCalendar({
               const inMonth = isSameMonth(date, viewMonth);
               const todayCell = isSameDay(date, today);
               const data = getDayData
-                ? getDayData(iso)
-                : getMockDayData(
-                    iso,
-                    totalFriends,
-                    selectedGroupId === 'all' ? undefined : selectedGroupId
-                  );
+                ? getDayData(iso, selectedGroupId)
+                : { date: iso, friendsInTown: 0, totalFriends: selectedTotalFriends };
               const bg = getHeatmapColor(data.friendsInTown, data.totalFriends);
               const dayNumber = format(date, 'd');
 

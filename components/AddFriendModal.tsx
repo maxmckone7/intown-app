@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Animated,
@@ -28,7 +28,7 @@ import {
 import Button from './Button';
 import { useReducedMotion } from '../lib/use-reduced-motion';
 import { useToast } from './ToastProvider';
-import { createInviteLink } from '../lib/invite';
+import { invitesService } from '../services/invites';
 
 type Props = {
   visible: boolean;
@@ -75,20 +75,17 @@ export default function AddFriendModal({ visible, onClose, onSend }: Props) {
   const [contactsOpen, setContactsOpen] = useState(false);
   const [contactsLoading, setContactsLoading] = useState(false);
   const [contacts, setContacts] = useState<InviteContact[]>([]);
+  const [inviteLoading, setInviteLoading] = useState(false);
   const opacity = useRef(new Animated.Value(0)).current;
   const translateY = useRef(new Animated.Value(30)).current;
   const reducedMotion = useReducedMotion();
   const toast = useToast();
 
-  const inviteMessage = useMemo(
-    () =>
-      `Join me on InTown so we can see when we're both around: ${inviteLink}`,
-    [inviteLink]
-  );
+  const buildInviteMessage = (link: string) =>
+    `Join me on InTown so we can see when we're both around: ${link}`;
 
   useEffect(() => {
     if (visible) {
-      setInviteLink((current) => current || createInviteLink());
       if (reducedMotion) {
         opacity.setValue(1);
         translateY.setValue(0);
@@ -139,9 +136,41 @@ export default function AddFriendModal({ visible, onClose, onSend }: Props) {
     Alert.alert(title, message);
   };
 
-  const copyInviteLink = async () => {
+  const ensureInviteLink = async (target?: {
+    invitee_email?: string;
+    invitee_phone?: string;
+  }) => {
+    if (!target && inviteLink) return inviteLink;
+
+    setInviteLoading(true);
     try {
-      await Clipboard.setStringAsync(inviteLink);
+      const link = await invitesService.createInviteLink(target);
+      if (!target) {
+        setInviteLink(link);
+      }
+      return link;
+    } catch (error: any) {
+      showAlert('Invite unavailable', error?.message || 'We could not create an invite link.');
+      return null;
+    } finally {
+      setInviteLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (visible && !inviteLink) {
+      void ensureInviteLink();
+    }
+    // The visible transition owns when we create a default invite link.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible]);
+
+  const copyInviteLink = async () => {
+    const link = await ensureInviteLink();
+    if (!link) return;
+
+    try {
+      await Clipboard.setStringAsync(link);
       setCopied(true);
       toast.success('Invite link copied');
       setTimeout(() => setCopied(false), 2000);
@@ -150,33 +179,41 @@ export default function AddFriendModal({ visible, onClose, onSend }: Props) {
     }
   };
 
-  const openSmsInvite = (phone?: string) => {
+  const openSmsInvite = async (phone?: string) => {
+    const link = await ensureInviteLink(phone ? { invitee_phone: phone } : undefined);
+    if (!link) return;
+
     const recipient = phone ? phone.replace(/[^\d+]/g, '') : '';
     const base = Platform.OS === 'ios' ? `sms:${recipient}&body=` : `sms:${recipient}?body=`;
-    Linking.openURL(`${base}${encodeURIComponent(inviteMessage)}`).catch(() => {
+    Linking.openURL(`${base}${encodeURIComponent(buildInviteMessage(link))}`).catch(() => {
       showAlert('Could not open Messages', 'Copy the invite link and send it by text instead.');
     });
   };
 
-  const openEmailInvite = (targetEmail?: string) => {
+  const openEmailInvite = async (targetEmail?: string) => {
+    const link = await ensureInviteLink(
+      targetEmail ? { invitee_email: targetEmail } : undefined
+    );
+    if (!link) return;
+
     const subject = 'Join me on InTown';
     const url = `mailto:${targetEmail ?? ''}?subject=${encodeURIComponent(
       subject
-    )}&body=${encodeURIComponent(inviteMessage)}`;
+    )}&body=${encodeURIComponent(buildInviteMessage(link))}`;
 
     Linking.openURL(url).catch(() => {
       showAlert('Could not open email', 'Copy the invite link and send it manually instead.');
     });
   };
 
-  const handleSend = () => {
+  const handleSend = async () => {
     const trimmed = email.trim();
     if (!trimmed) return;
 
     if (onSend) {
       onSend(trimmed);
     } else {
-      openEmailInvite(trimmed);
+      await openEmailInvite(trimmed);
     }
 
     onClose();
@@ -217,12 +254,12 @@ export default function AddFriendModal({ visible, onClose, onSend }: Props) {
 
   const inviteContact = (contact: InviteContact) => {
     if (contact.phone) {
-      openSmsInvite(contact.phone);
+      void openSmsInvite(contact.phone);
       return;
     }
 
     if (contact.email) {
-      openEmailInvite(contact.email);
+      void openEmailInvite(contact.email);
     }
   };
 
@@ -287,7 +324,10 @@ export default function AddFriendModal({ visible, onClose, onSend }: Props) {
             <View style={styles.linkRow}>
               <TextInput
                 style={styles.linkInput}
-                value={inviteLink}
+                value={
+                  inviteLink ||
+                  (inviteLoading ? 'Creating invite link...' : 'Invite link unavailable')
+                }
                 editable={false}
                 selectTextOnFocus
                 accessibilityLabel="Invite link"
@@ -297,6 +337,7 @@ export default function AddFriendModal({ visible, onClose, onSend }: Props) {
                 variant="primary"
                 size="sm"
                 onPress={copyInviteLink}
+                loading={inviteLoading && !inviteLink}
                 style={styles.copyButton}
               />
             </View>
@@ -388,7 +429,7 @@ export default function AddFriendModal({ visible, onClose, onSend }: Props) {
               label="Send invite"
               variant="primary"
               onPress={handleSend}
-              disabled={!email.trim()}
+              disabled={!email.trim() || inviteLoading}
               style={styles.actionButton}
             />
           </View>

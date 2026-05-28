@@ -28,6 +28,29 @@ export interface Friendship {
   created_at: string;
 }
 
+export interface FriendGroup {
+  id: string;
+  user_id: string;
+  name: string;
+  friend_ids: string[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Invite {
+  id: string;
+  inviter_id: string;
+  token: string;
+  invitee_email: string | null;
+  invitee_phone: string | null;
+  status: 'pending' | 'accepted' | 'revoked';
+  accepted_by: string | null;
+  accepted_at: string | null;
+  expires_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface FriendWithStatus extends User {
   friendship_id: string;
   friendship_status: 'pending' | 'accepted';
