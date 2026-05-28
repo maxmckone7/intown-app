@@ -8,8 +8,10 @@ import {
   Alert,
   Platform,
   Linking,
+  Share,
 } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
+import ContactsPickerModal, { SelectedContact } from './ContactsPickerModal';
 import { createInviteLink } from '../lib/invite';
 
 type InviteFriendsProps = {
@@ -19,12 +21,24 @@ type InviteFriendsProps = {
 export default function InviteFriends({ variant = 'card' }: InviteFriendsProps) {
   const [inviteLink, setInviteLink] = useState('');
   const [copied, setCopied] = useState(false);
+  const [pickerVisible, setPickerVisible] = useState(false);
 
+  const ensureLink = (): string => {
+    if (inviteLink) return inviteLink;
+    const mockLink = `https://intown.app/invite/${Math.random().toString(36).slice(2, 11)}`;
+    setInviteLink(mockLink);
   // Generate mock invite link (stub for now)
   const generateInviteLink = () => {
     // TODO: Replace with real invite link generation from API
     setInviteLink(createInviteLink());
     setCopied(false);
+    return mockLink;
+  };
+
+  // Generate mock invite link (stub for now)
+  const generateInviteLink = () => {
+    // TODO: Replace with real invite link generation from API
+    ensureLink();
   };
 
   const copyToClipboard = async () => {
@@ -67,12 +81,58 @@ export default function InviteFriends({ variant = 'card' }: InviteFriendsProps) 
     const subject = 'Join me on InTown!';
     const body = `Check out InTown - a social calendar app! Join me: ${inviteLink}`;
     const url = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-    
+
     Linking.openURL(url).catch(() => {
       Alert.alert('Error', 'Could not open email');
     });
   };
 
+  const shareToSocial = async () => {
+    const link = ensureLink();
+    try {
+      await Share.share({
+        message: `Join me on InTown! ${link}`,
+        url: link,
+        title: 'Join me on InTown!',
+      });
+    } catch {
+      Alert.alert('Error', 'Could not open share sheet');
+    }
+  };
+
+  const handlePickedContacts = (picked: SelectedContact[]) => {
+    setPickerVisible(false);
+    const link = ensureLink();
+    const message = `Join me on InTown! ${link}`;
+
+    const phones = picked.map((c) => c.phoneNumber).filter((p): p is string => Boolean(p));
+    const emails = picked.map((c) => c.email).filter((e): e is string => Boolean(e));
+
+    if (phones.length > 0) {
+      const sep = Platform.OS === 'ios' ? ',' : ';';
+      const numbers = phones.join(sep);
+      const url =
+        Platform.OS === 'ios'
+          ? `sms:${numbers}&body=${encodeURIComponent(message)}`
+          : `sms:${numbers}?body=${encodeURIComponent(message)}`;
+      Linking.openURL(url).catch(() => {
+        Alert.alert('Error', 'Could not open SMS');
+      });
+      return;
+    }
+
+    if (emails.length > 0) {
+      const subject = 'Join me on InTown!';
+      const body = `Check out InTown - a social calendar app! Join me: ${link}`;
+      const url = `mailto:${emails.join(',')}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+      Linking.openURL(url).catch(() => {
+        Alert.alert('Error', 'Could not open email');
+      });
+      return;
+    }
+
+    Alert.alert('No contact info', 'Selected contacts have no phone number or email.');
+  };
   if (variant === 'compact') {
     return (
       <View style={styles.compactContainer}>
@@ -142,32 +202,54 @@ export default function InviteFriends({ variant = 'card' }: InviteFriendsProps) 
         </TouchableOpacity>
       </View>
 
-      {inviteLink && (
-        <View style={styles.actions}>
-          <TouchableOpacity
-            style={[styles.actionButton, styles.copyButton]}
-            onPress={copyToClipboard}
-          >
-            <Text style={styles.actionButtonText}>
-              {copied ? 'Copied!' : 'Copy Link'}
-            </Text>
-          </TouchableOpacity>
+      <View style={styles.actions}>
+        <TouchableOpacity
+          style={[styles.actionButton, styles.contactsButton]}
+          onPress={() => setPickerVisible(true)}
+        >
+          <Text style={styles.actionButtonText}>Invite from your contacts</Text>
+        </TouchableOpacity>
 
-          <TouchableOpacity
-            style={[styles.actionButton, styles.smsButton]}
-            onPress={shareViaSMS}
-          >
-            <Text style={styles.actionButtonText}>Share via SMS</Text>
-          </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.actionButton, styles.socialButton]}
+          onPress={shareToSocial}
+        >
+          <Text style={styles.actionButtonText}>Share to Facebook / Instagram</Text>
+        </TouchableOpacity>
 
-          <TouchableOpacity
-            style={[styles.actionButton, styles.emailButton]}
-            onPress={shareViaEmail}
-          >
-            <Text style={styles.actionButtonText}>Share via Email</Text>
-          </TouchableOpacity>
-        </View>
-      )}
+        {inviteLink && (
+          <>
+            <TouchableOpacity
+              style={[styles.actionButton, styles.copyButton]}
+              onPress={copyToClipboard}
+            >
+              <Text style={styles.actionButtonText}>
+                {copied ? 'Copied!' : 'Copy Link'}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.actionButton, styles.smsButton]}
+              onPress={shareViaSMS}
+            >
+              <Text style={styles.actionButtonText}>Share via SMS</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.actionButton, styles.emailButton]}
+              onPress={shareViaEmail}
+            >
+              <Text style={styles.actionButtonText}>Share via Email</Text>
+            </TouchableOpacity>
+          </>
+        )}
+      </View>
+
+      <ContactsPickerModal
+        visible={pickerVisible}
+        onClose={() => setPickerVisible(false)}
+        onConfirm={handlePickedContacts}
+      />
     </View>
   );
 }
@@ -255,6 +337,12 @@ const styles = StyleSheet.create({
   },
   emailButton: {
     backgroundColor: '#FFA726',
+  },
+  contactsButton: {
+    backgroundColor: '#AB47BC',
+  },
+  socialButton: {
+    backgroundColor: '#5C6BC0',
   },
   actionButtonText: {
     color: '#fff',
