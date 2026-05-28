@@ -42,6 +42,19 @@ const getOAuthProfile = (user: SupabaseUser) => {
   };
 };
 
+const isLikelyNewAuthUser = (user: SupabaseUser | null | undefined) => {
+  const createdAt = user?.created_at ? Date.parse(user.created_at) : NaN;
+  const lastSignInAt = user?.last_sign_in_at
+    ? Date.parse(user.last_sign_in_at)
+    : NaN;
+
+  if (!Number.isFinite(createdAt) || !Number.isFinite(lastSignInAt)) {
+    return false;
+  }
+
+  return Math.abs(lastSignInAt - createdAt) <= 10_000;
+};
+
 const ensureUserProfile = async (user: SupabaseUser | null) => {
   if (!user?.email) {
     return;
@@ -74,7 +87,11 @@ const completeOAuthSignIn = async (provider: 'google' | 'apple') => {
   // and returns the session directly, bypassing the browser-based OAuth flow.
   if (isMockSupabase && data?.mocked) {
     await ensureUserProfile(data.user);
-    return { user: data.user, session: data.session };
+    return {
+      user: data.user,
+      session: data.session,
+      isNewUser: data.isNewUser ?? isLikelyNewAuthUser(data.user),
+    };
   }
 
   if (!data?.url) {
@@ -104,7 +121,10 @@ const completeOAuthSignIn = async (provider: 'google' | 'apple') => {
   if (sessionError) throw sessionError;
   await ensureUserProfile(sessionData.user);
 
-  return sessionData;
+  return {
+    ...sessionData,
+    isNewUser: isLikelyNewAuthUser(sessionData.user),
+  };
 };
 
 export const authService = {

@@ -41,6 +41,8 @@ type Props = {
   getDayData?: (isoDate: string) => HeatmapDayData;
   onDayPress?: (isoDate: string) => void;
   onAddFriendsPress?: () => void;
+  showEmptyStatePrompt?: boolean;
+  onDismissEmptyState?: () => void;
 };
 
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -51,6 +53,8 @@ export default function FriendsCalendar({
   getDayData,
   onDayPress,
   onAddFriendsPress,
+  showEmptyStatePrompt,
+  onDismissEmptyState,
 }: Props) {
   const today = startOfToday();
   const [viewMonth, setViewMonth] = useState<Date>(startOfMonth(today));
@@ -68,12 +72,19 @@ export default function FriendsCalendar({
   const goToday = () => setViewMonth(startOfMonth(today));
 
   const isEmpty = totalFriends <= 0;
+  const shouldShowEmptyStatePrompt =
+    showEmptyStatePrompt ?? !isEmptyStateDismissed;
 
   const handleDayPress = (iso: string) => {
     if (onDayPress) onDayPress(iso);
     // DES-14 will replace this console.log with a real day-detail modal
     // eslint-disable-next-line no-console
     console.log('day pressed:', iso);
+  };
+
+  const handleDismissEmptyState = () => {
+    setIsEmptyStateDismissed(true);
+    onDismissEmptyState?.();
   };
 
   return (
@@ -188,11 +199,11 @@ export default function FriendsCalendar({
           </View>
         </View>
 
-        {isEmpty && !isEmptyStateDismissed && (
+        {isEmpty && shouldShowEmptyStatePrompt && (
           <View pointerEvents="box-none" style={styles.emptyOverlay}>
             <View style={styles.emptyCard}>
               <Pressable
-                onPress={() => setIsEmptyStateDismissed(true)}
+                onPress={handleDismissEmptyState}
                 accessibilityLabel="Dismiss add friends popup"
                 accessibilityRole="button"
                 hitSlop={8}

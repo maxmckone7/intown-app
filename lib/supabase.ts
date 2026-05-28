@@ -34,9 +34,12 @@ class MockSupabaseClient {
   auth = {
     signUp: async ({ email, password, options }: any) => {
       const userId = `user_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
+      const createdAt = new Date().toISOString();
       const user = {
         id: userId,
         email,
+        created_at: createdAt,
+        last_sign_in_at: createdAt,
         user_metadata: options?.data || {},
       };
 
@@ -50,7 +53,7 @@ class MockSupabaseClient {
         location: null,
         interests: [],
         social_accounts: {},
-        created_at: new Date().toISOString(),
+        created_at: createdAt,
       });
       await this.setStoredData('users', users);
 
@@ -183,10 +186,13 @@ class MockSupabaseClient {
       const providerLabel = provider === 'google' ? 'Google' : provider === 'apple' ? 'Apple' : provider;
       const email = `dev-${provider}@intown.local`;
       const name = `Dev ${providerLabel} User`;
+      const signedInAt = new Date().toISOString();
 
       const users = (await this.getStoredData('users')) || [];
       let userRecord = users.find((u: any) => u.email === email);
+      let isNewUser = false;
       if (!userRecord) {
+        isNewUser = true;
         userRecord = {
           id: `oauth_${provider}_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`,
           email,
@@ -195,7 +201,7 @@ class MockSupabaseClient {
           location: null,
           interests: [],
           social_accounts: { [provider]: true },
-          created_at: new Date().toISOString(),
+          created_at: signedInAt,
         };
         users.push(userRecord);
         await this.setStoredData('users', users);
@@ -204,6 +210,8 @@ class MockSupabaseClient {
       const user = {
         id: userRecord.id,
         email,
+        created_at: userRecord.created_at,
+        last_sign_in_at: signedInAt,
         user_metadata: {
           name,
           full_name: name,
@@ -223,7 +231,7 @@ class MockSupabaseClient {
       };
       await this.setStoredData('auth_session', session);
 
-      return { data: { provider, mocked: true, user, session }, error: null };
+      return { data: { provider, mocked: true, user, session, isNewUser }, error: null };
     },
 
     onAuthStateChange: (callback: any) => {

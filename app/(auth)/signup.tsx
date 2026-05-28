@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { authService } from '../../services/auth';
+import { addFriendsPromptService } from '../../services/addFriendsPrompt';
 import Button from '../../components/Button';
 import { colors } from '../../theme';
 
@@ -23,12 +24,26 @@ const showAlert = (title: string, message: string) => {
   }
 };
 
+type SignUpAuthResult = {
+  user?: { id?: string } | null;
+  isNewUser?: boolean;
+};
+
 export default function SignUpScreen() {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const router = useRouter();
+
+  const markAddFriendsPromptEligible = async (
+    result: SignUpAuthResult,
+    force = false
+  ) => {
+    if (result.user?.id && (force || result.isNewUser)) {
+      await addFriendsPromptService.markEligible(result.user.id);
+    }
+  };
 
   const handleSignUp = async () => {
     if (!name || !email || !password) {
@@ -43,7 +58,8 @@ export default function SignUpScreen() {
 
     setLoading(true);
     try {
-      await authService.signUp(email, password, name);
+      const result = await authService.signUp(email, password, name);
+      await markAddFriendsPromptEligible(result, true);
       showAlert('Success', 'Account created!');
       if (Platform.OS === 'web') {
         router.push('/(tabs)');
@@ -60,7 +76,8 @@ export default function SignUpScreen() {
   const handleGoogleLogin = async () => {
     setLoading(true);
     try {
-      await authService.signInWithGoogle();
+      const result = await authService.signInWithGoogle();
+      await markAddFriendsPromptEligible(result);
       if (Platform.OS === 'web') {
         router.push('/(tabs)');
       } else {
@@ -75,7 +92,8 @@ export default function SignUpScreen() {
   const handleAppleLogin = async () => {
     setLoading(true);
     try {
-      await authService.signInWithApple();
+      const result = await authService.signInWithApple();
+      await markAddFriendsPromptEligible(result);
       if (Platform.OS === 'web') {
         router.push('/(tabs)');
       } else {
