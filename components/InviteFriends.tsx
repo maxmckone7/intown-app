@@ -10,6 +10,7 @@ import {
   Linking,
 } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
+import { createInviteLink } from '../lib/invite';
 
 type InviteFriendsProps = {
   variant?: 'card' | 'compact';
@@ -22,8 +23,7 @@ export default function InviteFriends({ variant = 'card' }: InviteFriendsProps) 
   // Generate mock invite link (stub for now)
   const generateInviteLink = () => {
     // TODO: Replace with real invite link generation from API
-    const mockLink = `https://intown.app/invite/${Math.random().toString(36).slice(2, 11)}`;
-    setInviteLink(mockLink);
+    setInviteLink(createInviteLink());
     setCopied(false);
   };
 
