@@ -7,6 +7,7 @@ import {
   StyleSheet,
   View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { format } from 'date-fns';
 import { useRouter } from 'expo-router';
@@ -29,6 +30,11 @@ import DayDetailModal from '../../components/DayDetailModal';
 import { CalendarSkeleton } from '../../components/Skeleton';
 import { colors } from '../../theme';
 
+const CONTENT_PADDING_BOTTOM = 24;
+
+export default function FriendsCalendarScreen() {
+  const router = useRouter();
+  const insets = useSafeAreaInsets();
 const HEATMAP_POLL_INTERVAL_MS = 10000;
 const REALTIME_REFRESH_DEBOUNCE_MS = 250;
 
@@ -346,7 +352,11 @@ export default function FriendsCalendarScreen() {
     <>
       <ScrollView
         style={styles.container}
-        contentContainerStyle={styles.content}
+        contentContainerStyle={[
+          styles.content,
+          { paddingBottom: CONTENT_PADDING_BOTTOM + insets.bottom },
+        ]}
+        contentInsetAdjustmentBehavior="automatic"
       >
         <FriendsCalendar
           totalFriends={friends.length}
@@ -386,7 +396,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background.primary,
   },
   content: {
-    paddingBottom: 24,
+    paddingBottom: CONTENT_PADDING_BOTTOM,
   },
   centerContainer: {
     flex: 1,
