@@ -1,6 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  Alert,
   FlatList,
   Image,
   Pressable,
@@ -11,7 +10,9 @@ import {
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { format } from 'date-fns';
+import { useRouter } from 'expo-router';
 import { authService } from '../../services/auth';
+import { addFriendsPromptService } from '../../services/addFriendsPrompt';
 import { calendarService } from '../../services/calendar';
 import { friendsService } from '../../services/friends';
 import { privacyService } from '../../services/privacy';
@@ -21,6 +22,7 @@ import Button from '../../components/Button';
 import AddFriendModal from '../../components/AddFriendModal';
 import InviteFriends from '../../components/InviteFriends';
 import { FriendsListSkeleton } from '../../components/Skeleton';
+import StateFeedback from '../../components/StateFeedback';
 import {
   colors,
   fontFamilies,
@@ -62,26 +64,34 @@ const buildStatus = (
 };
 
 export default function FriendsScreen() {
+  const router = useRouter();
   const [friends, setFriends] = useState<FriendWithStatus[]>([]);
   const [todayStatuses, setTodayStatuses] = useState<Record<string, CalendarStatus>>({});
   const [visibility, setVisibility] = useState<Map<string, VisibilityLevel>>(new Map());
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [needsAvailabilitySetup, setNeedsAvailabilitySetup] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchFocused, setSearchFocused] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
 
-  useEffect(() => {
-    loadFriends();
-  }, []);
-
-  const loadFriends = async () => {
+  const loadFriends = useCallback(async () => {
+    setLoading(true);
+    setLoadError(null);
     try {
       const user = await authService.getCurrentUser();
       if (!user) {
-        Alert.alert('Error', 'Not authenticated');
+        setLoadError('We could not confirm your session. Please sign in again.');
         return;
       }
       const today = format(new Date(), 'yyyy-MM-dd');
+      const [list, entries, shouldSetAvailability] = await Promise.all([
+        friendsService.getFriends(user.id),
+        calendarService.getFriendsEntries(user.id, today, today),
+        addFriendsPromptService.shouldSetAvailability(user.id),
+      ]);
+      setFriends(list);
+      setNeedsAvailabilitySetup(shouldSetAvailability);
       const [list, entries, visibilityMap] = await Promise.all([
         friendsService.getFriends(user.id),
         calendarService.getFriendsEntries(user.id, today, today),
@@ -96,11 +106,15 @@ export default function FriendsScreen() {
         }, {})
       );
     } catch (error: any) {
-      Alert.alert('Error', error.message || 'Failed to load friends');
+      setLoadError(error.message || 'Failed to load friends');
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    void loadFriends();
+  }, [loadFriends]);
 
   const friendsWithStatus = useMemo(
     () =>
@@ -137,6 +151,25 @@ export default function FriendsScreen() {
           </View>
           <FriendsListSkeleton />
         </View>
+      </View>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <View style={styles.errorContainer}>
+        <StateFeedback
+          eyebrow="Friends unavailable"
+          title="We could not load your friends"
+          body={loadError}
+          primaryAction={{
+            label: 'Try again',
+            onPress: () => {
+              void loadFriends();
+            },
+            loading,
+          }}
+        />
       </View>
     );
   }
@@ -192,21 +225,43 @@ export default function FriendsScreen() {
 
         {showEmptyState ? (
           <View style={styles.emptyState}>
-            <View style={styles.emptyCircle}>
-              <Text style={styles.emptyGlyph}>👋</Text>
-            </View>
-            <Text style={styles.emptyTitle}>No friends yet</Text>
-            <Text style={styles.emptyBody}>
-              Add friends to see when they're in town and start planning
-              together.
-            </Text>
-            <Button
-              label="Add your first friend"
-              variant="primary"
-              onPress={() => setAddOpen(true)}
-              style={styles.emptyButton}
-            />
-            <InviteFriends variant="compact" />
+            {needsAvailabilitySetup ? (
+              <>
+                <View style={styles.emptyCircle}>
+                  <Feather name="calendar" size={28} color={colors.brand.primary} />
+                </View>
+                <Text style={styles.emptyEyebrow}>Step 1 of 2</Text>
+                <Text style={styles.emptyTitle}>Set availability first</Text>
+                <Text style={styles.emptyBody}>
+                  Add a starting status to your calendar before you invite
+                  friends into it.
+                </Text>
+                <Button
+                  label="Set my availability"
+                  variant="primary"
+                  onPress={() => router.push('/(tabs)/my-calendar')}
+                  style={styles.emptyButton}
+                />
+              </>
+            ) : (
+              <>
+                <View style={styles.emptyCircle}>
+                  <Text style={styles.emptyGlyph}>👋</Text>
+                </View>
+                <Text style={styles.emptyTitle}>No friends yet</Text>
+                <Text style={styles.emptyBody}>
+                  Add friends to see when they're in town and start planning
+                  together.
+                </Text>
+                <Button
+                  label="Add your first friend"
+                  variant="primary"
+                  onPress={() => setAddOpen(true)}
+                  style={styles.emptyButton}
+                />
+                <InviteFriends variant="compact" />
+              </>
+            )}
           </View>
         ) : (
           <FlatList
@@ -303,6 +358,13 @@ const styles = StyleSheet.create({
   outer: {
     flex: 1,
     backgroundColor: colors.background.primary,
+  },
+  errorContainer: {
+    flex: 1,
+    backgroundColor: colors.background.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: spacing[4],
   },
   centerContainer: {
     flex: 1,
@@ -467,6 +529,14 @@ const styles = StyleSheet.create({
   emptyGlyph: {
     fontSize: 28,
     lineHeight: 32,
+  },
+  emptyEyebrow: {
+    fontFamily: fontFamilies.inter.medium,
+    fontSize: typography.label.fontSize,
+    fontWeight: '700',
+    letterSpacing: typography.label.letterSpacing,
+    color: colors.brand.primary,
+    textTransform: 'uppercase',
   },
   emptyTitle: {
     fontFamily: fontFamilies.fraunces.medium,

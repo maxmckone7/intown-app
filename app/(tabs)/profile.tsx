@@ -18,6 +18,7 @@ import { Feather } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
 import { authService } from '../../services/auth';
+import { addFriendsPromptService } from '../../services/addFriendsPrompt';
 import {
   CoordinationNotificationPreferenceUpdate,
   coordinationNotificationsService,
@@ -33,6 +34,8 @@ import {
 } from '../../lib/types';
 import InviteFriends from '../../components/InviteFriends';
 import Button from '../../components/Button';
+import StateFeedback from '../../components/StateFeedback';
+import { ProfileHeroSkeleton } from '../../components/Skeleton';
 import PrivacyModal from '../../components/PrivacyModal';
 import { useToast } from '../../components/ToastProvider';
 import {
@@ -185,6 +188,8 @@ const uploadAvatar = async (asset: ImagePicker.ImagePickerAsset, userId: string)
 export default function ProfileScreen() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [needsAvailabilitySetup, setNeedsAvailabilitySetup] = useState(false);
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
@@ -223,6 +228,8 @@ export default function ProfileScreen() {
   };
 
   const loadUser = async () => {
+    setLoading(true);
+    setLoadError(null);
     try {
       const authUser = await authService.getCurrentUser();
       if (!authUser) {
@@ -246,12 +253,16 @@ export default function ProfileScreen() {
 
       if (error) throw error;
 
+      const shouldSetAvailability = await addFriendsPromptService.shouldSetAvailability(
+        authUser.id
+      );
+      setNeedsAvailabilitySetup(shouldSetAvailability);
       setUser(data);
       populateProfileForm(data);
       setNotificationPreferences(coordinationPreferences);
       setNotificationGroups(groups);
     } catch (error: any) {
-      Alert.alert('Error', error.message || 'Failed to load profile');
+      setLoadError(error.message || 'Failed to load profile');
     } finally {
       setLoading(false);
     }
@@ -460,8 +471,27 @@ export default function ProfileScreen() {
 
   if (loading) {
     return (
-      <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color="#007AFF" />
+      <View style={styles.container}>
+        <ProfileHeroSkeleton />
+      </View>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <View style={styles.errorContainer}>
+        <StateFeedback
+          eyebrow="Profile unavailable"
+          title="We could not load your profile"
+          body={loadError}
+          primaryAction={{
+            label: 'Try again',
+            onPress: () => {
+              void loadUser();
+            },
+            loading,
+          }}
+        />
       </View>
     );
   }
@@ -948,7 +978,20 @@ export default function ProfileScreen() {
         </View>
 
         <View style={styles.inviteCard}>
-          <InviteFriends />
+          {needsAvailabilitySetup ? (
+            <StateFeedback
+              compact
+              eyebrow="First run"
+              title="Set availability before inviting friends"
+              body="Start with your own calendar so friends can plan around you once they join."
+              primaryAction={{
+                label: 'Set availability',
+                onPress: () => router.push('/(tabs)/my-calendar'),
+              }}
+            />
+          ) : (
+            <InviteFriends />
+          )}
         </View>
 
         <Pressable
@@ -1245,6 +1288,13 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  errorContainer: {
+    flex: 1,
+    backgroundColor: colors.background.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: spacing[4],
   },
   header: {
     alignItems: 'center',

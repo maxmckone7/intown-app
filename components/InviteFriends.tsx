@@ -23,17 +23,19 @@ export default function InviteFriends({ variant = 'card' }: InviteFriendsProps) 
   const [copied, setCopied] = useState(false);
   const [pickerVisible, setPickerVisible] = useState(false);
   const [inviteLoading, setInviteLoading] = useState(false);
+  const [inviteError, setInviteError] = useState<string | null>(null);
 
   const ensureLink = async (): Promise<string | null> => {
     if (inviteLink) return inviteLink;
 
     setInviteLoading(true);
+    setInviteError(null);
     try {
       const link = await invitesService.createInviteLink();
       setInviteLink(link);
       return link;
     } catch (error: any) {
-      Alert.alert('Error', error?.message || 'Failed to create invite link');
+      setInviteError(error?.message || 'Failed to create invite link');
       return null;
     } finally {
       setInviteLoading(false);
@@ -185,6 +187,14 @@ export default function InviteFriends({ variant = 'card' }: InviteFriendsProps) 
             </View>
           </>
         )}
+        {inviteError && (
+          <View style={styles.compactErrorBox}>
+            <Text style={styles.errorText}>{inviteError}</Text>
+            <TouchableOpacity onPress={generateInviteLink} disabled={inviteLoading}>
+              <Text style={styles.errorRetryText}>Try again</Text>
+            </TouchableOpacity>
+          </View>
+        )}
       </View>
     );
   }
@@ -211,6 +221,17 @@ export default function InviteFriends({ variant = 'card' }: InviteFriendsProps) 
           </Text>
         </TouchableOpacity>
       </View>
+
+      {inviteError && (
+        <View style={styles.errorBox}>
+          <Text style={styles.errorText}>{inviteError}</Text>
+          <TouchableOpacity onPress={generateInviteLink} disabled={inviteLoading}>
+            <Text style={styles.errorRetryText}>
+              {inviteLoading ? 'Retrying...' : 'Try again'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       <View style={styles.actions}>
         <TouchableOpacity
@@ -293,6 +314,25 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     marginBottom: 20,
   },
+  errorBox: {
+    borderWidth: 1,
+    borderColor: '#F4C7C3',
+    backgroundColor: '#FFF6F5',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 16,
+    gap: 8,
+  },
+  errorText: {
+    color: '#8A3B32',
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  errorRetryText: {
+    color: '#007AFF',
+    fontSize: 14,
+    fontWeight: '700',
+  },
   linkInput: {
     flex: 1,
     borderWidth: 1,
@@ -365,6 +405,17 @@ const styles = StyleSheet.create({
     maxWidth: 420,
     marginTop: 20,
     alignItems: 'center',
+  },
+  compactErrorBox: {
+    width: '100%',
+    borderWidth: 1,
+    borderColor: '#F4C7C3',
+    backgroundColor: '#FFF6F5',
+    borderRadius: 10,
+    padding: 10,
+    marginTop: 12,
+    alignItems: 'center',
+    gap: 6,
   },
   compactButton: {
     paddingHorizontal: 18,

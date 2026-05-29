@@ -1,3 +1,4 @@
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Platform,
@@ -22,6 +23,7 @@ import {
   startOfWeek,
   subMonths,
 } from 'date-fns';
+import { useRouter } from 'expo-router';
 import {
   colors,
   fontFamilies,
@@ -30,9 +32,13 @@ import {
   spacing,
   typography,
 } from '../theme';
+import Button from './Button';
+import StateFeedback from './StateFeedback';
+import { MyCalendarSkeleton } from './Skeleton';
 import { useToast } from './ToastProvider';
 import { authService } from '../services/auth';
 import { calendarService } from '../services/calendar';
+import { addFriendsPromptService } from '../services/addFriendsPrompt';
 import { CalendarStatus } from '../lib/types';
 import { getCalendarLayout } from './calendarLayout';
 
@@ -96,6 +102,8 @@ function showComingSoon(label: string) {
 }
 
 export default function MyCalendar() {
+  const today = useMemo(() => startOfToday(), []);
+  const router = useRouter();
   const today = startOfToday();
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
@@ -103,6 +111,14 @@ export default function MyCalendar() {
   const [statusByDate, setStatusByDate] = useState<PersonalStatusMap>({});
   const [saveStateByDate, setSaveStateByDate] = useState<SaveStatusMap>({});
   const [userId, setUserId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [showOnboardingGuide, setShowOnboardingGuide] = useState(false);
+  const [onboardingComplete, setOnboardingComplete] = useState(false);
+  const [savingOnboardingStatus, setSavingOnboardingStatus] =
+    useState<DayStatus | null>(null);
+  const [completingManualOnboarding, setCompletingManualOnboarding] =
+    useState(false);
   const toast = useToast();
   const layout = useMemo(
     () => getCalendarLayout(width, { left: insets.left, right: insets.right }),
@@ -241,9 +257,41 @@ export default function MyCalendar() {
     };
   }, []);
 
+  const loadCalendar = useCallback(async () => {
+    setLoading(true);
+    setLoadError(null);
+    setOnboardingComplete(false);
+
+    try {
+      const user = await authService.getCurrentUser();
+      if (!user) {
+        setLoadError('We could not confirm your session. Please sign in again.');
+        return;
+      }
+
+      setUserId(user.id);
+      const [entries, needsAvailabilitySetup] = await Promise.all([
+        calendarService.getEntries(user.id),
+        addFriendsPromptService.shouldSetAvailability(user.id),
+      ]);
+      const map: PersonalStatusMap = {};
+      for (const e of entries) {
+        map[e.date] = calendarStatusToDayStatus(e.status);
+      }
+      setStatusByDate(map);
+      setShowOnboardingGuide(needsAvailabilitySetup);
+    } catch (err: any) {
+      setLoadError(err?.message || 'Failed to load your calendar');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
   // Load the user's existing entries from Supabase on mount so toggles
   // persist across navigation and page reloads (ENG-84).
   useEffect(() => {
+    void loadCalendar();
+  }, [loadCalendar]);
     let mounted = true;
     (async () => {
       try {
@@ -354,6 +402,95 @@ export default function MyCalendar() {
     return null;
   }, [saveStateByDate]);
 
+  const completeAvailabilityOnboarding = async () => {
+    if (!userId) {
+      setLoadError('We could not confirm your session. Please sign in again.');
+      return;
+    }
+
+    setCompletingManualOnboarding(true);
+    try {
+      await addFriendsPromptService.markAvailabilitySet(userId);
+      setShowOnboardingGuide(false);
+      setOnboardingComplete(true);
+      toast.success('Availability setup complete');
+    } finally {
+      setCompletingManualOnboarding(false);
+    }
+  };
+
+  const setWeekAvailability = async (status: DayStatus) => {
+    if (!userId) {
+      setLoadError('We could not confirm your session. Please sign in again.');
+      return;
+    }
+
+    setSavingOnboardingStatus(status);
+    const days = eachDayOfInterval({
+      start: startOfWeek(today, { weekStartsOn: 0 }),
+      end: endOfWeek(today, { weekStartsOn: 0 }),
+    });
+    const updates = days.reduce<PersonalStatusMap>((map, date) => {
+      map[ISO(date)] = status;
+      return map;
+    }, {});
+    const previous = statusByDate;
+
+    setStatusByDate((current) => ({ ...current, ...updates }));
+
+    try {
+      await Promise.all(
+        days.map((date) =>
+          calendarService.setEntry(
+            userId,
+            ISO(date),
+            dayStatusToCalendarStatus(status)
+          )
+        )
+      );
+      await addFriendsPromptService.markAvailabilitySet(userId);
+      setShowOnboardingGuide(false);
+      setOnboardingComplete(true);
+      toast.success(
+        status === 'in_town'
+          ? 'This week is marked in town'
+          : 'This week is marked away'
+      );
+    } catch (err: any) {
+      setStatusByDate(previous);
+      toast.show(err?.message || 'Failed to save this week', { variant: 'info' });
+    } finally {
+      setSavingOnboardingStatus(null);
+    }
+  };
+
+  if (loading) {
+    return (
+      <View style={styles.outer}>
+        <MyCalendarSkeleton />
+      </View>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <View style={styles.errorScreen}>
+        <StateFeedback
+          eyebrow="Calendar unavailable"
+          title="We could not load your availability"
+          body={loadError}
+          primaryAction={{
+            label: 'Try again',
+            onPress: () => {
+              void loadCalendar();
+            },
+            loading,
+          }}
+        />
+      </View>
+    );
+  }
+
   return (
     <ScrollView
       style={styles.outer}
@@ -369,6 +506,72 @@ export default function MyCalendar() {
       contentInsetAdjustmentBehavior="automatic"
     >
       <View style={styles.inner}>
+        {showOnboardingGuide && (
+          <View style={styles.onboardingCard}>
+            <Text style={styles.onboardingEyebrow}>Step 1 of 2</Text>
+            <Text style={styles.onboardingTitle}>Set your availability first</Text>
+            <Text style={styles.onboardingBody}>
+              Friends can plan around you once your calendar has a starting
+              status. Pick a quick default for this week, then invite friends.
+            </Text>
+            <View style={styles.onboardingSteps}>
+              <View style={styles.onboardingStepActive}>
+                <Text style={styles.onboardingStepNumber}>1</Text>
+                <Text style={styles.onboardingStepText}>Set availability</Text>
+              </View>
+              <View style={styles.onboardingStep}>
+                <Text style={styles.onboardingStepNumberMuted}>2</Text>
+                <Text style={styles.onboardingStepTextMuted}>Invite friends</Text>
+              </View>
+            </View>
+            <View style={styles.onboardingActions}>
+              <Button
+                label="In town this week"
+                onPress={() => {
+                  void setWeekAvailability('in_town');
+                }}
+                loading={savingOnboardingStatus === 'in_town'}
+                disabled={savingOnboardingStatus !== null || completingManualOnboarding}
+                style={styles.onboardingButton}
+              />
+              <Button
+                label="Away this week"
+                variant="secondary"
+                onPress={() => {
+                  void setWeekAvailability('away');
+                }}
+                loading={savingOnboardingStatus === 'away'}
+                disabled={savingOnboardingStatus !== null || completingManualOnboarding}
+                style={styles.onboardingButton}
+              />
+            </View>
+            <Button
+              label="I've set individual days"
+              variant="secondary"
+              onPress={() => {
+                void completeAvailabilityOnboarding();
+              }}
+              loading={completingManualOnboarding}
+              disabled={savingOnboardingStatus !== null || completingManualOnboarding}
+              style={styles.manualOnboardingButton}
+            />
+          </View>
+        )}
+
+        {onboardingComplete && (
+          <StateFeedback
+            compact
+            eyebrow="Step 2 of 2"
+            title="Availability saved"
+            body="You are ready to invite friends and see when everyone's in town."
+            primaryAction={{
+              label: 'Invite friends',
+              onPress: () => router.push('/(tabs)'),
+            }}
+            style={styles.onboardingCompleteCard}
+          />
+        )}
+
         <View style={styles.titleBlock}>
           <Text style={[styles.pageTitle, layout.compact && styles.pageTitleCompact]}>
             My Calendar
@@ -642,12 +845,118 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background.primary,
   },
+  errorScreen: {
+    flex: 1,
+    backgroundColor: colors.background.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: spacing[4],
+  },
   outerContent: {
     alignItems: 'center',
   },
   inner: {
     width: '100%',
     maxWidth: 1200,
+  },
+  onboardingCard: {
+    backgroundColor: colors.background.card,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border.subtle,
+    padding: spacing[5],
+    marginBottom: spacing[5],
+    ...shadows.md,
+  },
+  onboardingEyebrow: {
+    fontFamily: fontFamilies.inter.medium,
+    fontSize: typography.label.fontSize,
+    fontWeight: '700',
+    letterSpacing: typography.label.letterSpacing,
+    color: colors.brand.primary,
+    marginBottom: spacing[2],
+    textTransform: 'uppercase',
+  },
+  onboardingTitle: {
+    fontFamily: fontFamilies.fraunces.semibold,
+    fontSize: typography.display.medium.fontSize,
+    lineHeight: typography.display.medium.lineHeight,
+    fontWeight: '600',
+    color: colors.text.primary,
+    marginBottom: spacing[2],
+  },
+  onboardingBody: {
+    maxWidth: 640,
+    fontFamily: fontFamilies.inter.regular,
+    fontSize: typography.body.default.fontSize,
+    lineHeight: typography.body.default.lineHeight,
+    color: colors.text.secondary,
+  },
+  onboardingSteps: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing[3],
+    marginTop: spacing[5],
+  },
+  onboardingStepActive: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[2],
+    borderRadius: radius.full,
+    backgroundColor: 'rgba(0, 122, 255, 0.12)',
+    paddingHorizontal: spacing[3],
+    paddingVertical: spacing[2],
+  },
+  onboardingStep: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[2],
+    borderRadius: radius.full,
+    backgroundColor: colors.background.secondary,
+    paddingHorizontal: spacing[3],
+    paddingVertical: spacing[2],
+  },
+  onboardingStepNumber: {
+    fontFamily: fontFamilies.inter.medium,
+    fontSize: typography.label.fontSize,
+    fontWeight: '700',
+    color: colors.brand.primary,
+  },
+  onboardingStepNumberMuted: {
+    fontFamily: fontFamilies.inter.medium,
+    fontSize: typography.label.fontSize,
+    fontWeight: '700',
+    color: colors.text.tertiary,
+  },
+  onboardingStepText: {
+    fontFamily: fontFamilies.inter.medium,
+    fontSize: typography.body.small.fontSize,
+    fontWeight: '700',
+    color: colors.text.primary,
+  },
+  onboardingStepTextMuted: {
+    fontFamily: fontFamilies.inter.medium,
+    fontSize: typography.body.small.fontSize,
+    fontWeight: '700',
+    color: colors.text.secondary,
+  },
+  onboardingActions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing[3],
+    marginTop: spacing[5],
+  },
+  onboardingButton: {
+    minWidth: 180,
+  },
+  manualOnboardingButton: {
+    alignSelf: 'flex-start',
+    minWidth: 220,
+    marginTop: spacing[3],
+  },
+  onboardingCompleteCard: {
+    maxWidth: '100%',
+    marginBottom: spacing[5],
   },
   titleBlock: {
     marginBottom: spacing[5],
