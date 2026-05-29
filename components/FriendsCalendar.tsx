@@ -40,8 +40,13 @@ import { getCalendarLayout } from './calendarLayout';
 type Props = {
   totalFriends: number;
   groups?: FilterGroup[];
+  selectedGroupId?: string;
+  onSelectGroup?: (groupId: string) => void;
   getDayData?: (isoDate: string, groupId: string) => HeatmapDayData;
+  lastUpdatedAt?: Date | null;
+  isRefreshing?: boolean;
   onDayPress?: (isoDate: string) => void;
+  onDayPress?: (isoDate: string, groupId: string) => void;
   onAddFriendsPress?: () => void;
   showEmptyStatePrompt?: boolean;
   onDismissEmptyState?: () => void;
@@ -53,7 +58,11 @@ const ISO = (d: Date) => format(d, 'yyyy-MM-dd');
 export default function FriendsCalendar({
   totalFriends,
   groups = [],
+  selectedGroupId,
+  onSelectGroup,
   getDayData,
+  lastUpdatedAt,
+  isRefreshing,
   onDayPress,
   onAddFriendsPress,
   showEmptyStatePrompt,
@@ -63,21 +72,22 @@ export default function FriendsCalendar({
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const [viewMonth, setViewMonth] = useState<Date>(startOfMonth(today));
-  const [selectedGroupId, setSelectedGroupId] = useState<string>('all');
+  const [internalSelectedGroupId, setInternalSelectedGroupId] = useState<string>('all');
   const [isEmptyStateDismissed, setIsEmptyStateDismissed] = useState(false);
   const layout = useMemo(
     () => getCalendarLayout(width, { left: insets.left, right: insets.right }),
     [insets.left, insets.right, width]
   );
+  const activeGroupId = selectedGroupId ?? internalSelectedGroupId;
 
   const filterGroups = useMemo(
     () => [...DEFAULT_GROUPS, ...groups],
     [groups]
   );
 
-  const selectedGroup = filterGroups.find((group) => group.id === selectedGroupId);
+  const selectedGroup = filterGroups.find((group) => group.id === activeGroupId);
   const selectedTotalFriends =
-    selectedGroupId === 'all'
+    activeGroupId === 'all'
       ? totalFriends
       : selectedGroup?.friendIds?.length ?? 0;
 
@@ -97,12 +107,28 @@ export default function FriendsCalendar({
   const weekdayLabels = layout.compact
     ? WEEKDAYS.map((day) => day.slice(0, 1))
     : WEEKDAYS.map((day) => day.toUpperCase());
+  const freshnessLabel = isRefreshing
+    ? 'Refreshing availability...'
+    : lastUpdatedAt
+      ? `Updated ${format(lastUpdatedAt, 'h:mm a')}`
+      : 'Availability not updated yet';
 
   const handleDayPress = (iso: string) => {
-    if (onDayPress) onDayPress(iso);
-    // DES-14 will replace this console.log with a real day-detail modal
-    // eslint-disable-next-line no-console
-    console.log('day pressed:', iso);
+    onDayPress?.(iso, activeGroupId);
+  };
+
+  const handleGroupSelect = (groupId: string) => {
+    if (selectedGroupId === undefined) {
+      setInternalSelectedGroupId(groupId);
+    }
+    onSelectGroup?.(groupId);
+  };
+
+  const handleGroupSelect = (groupId: string) => {
+    if (selectedGroupId === undefined) {
+      setInternalSelectedGroupId(groupId);
+    }
+    onSelectGroup?.(groupId);
   };
 
   const handleDismissEmptyState = () => {
@@ -123,7 +149,7 @@ export default function FriendsCalendar({
     >
       <View style={styles.inner}>
         <View style={styles.topRow}>
-          <View />
+          <Text style={styles.freshnessLabel}>{freshnessLabel}</Text>
           <Pressable
             onPress={goToday}
             accessibilityRole="button"
@@ -171,8 +197,8 @@ export default function FriendsCalendar({
         <View style={styles.filterRow}>
           <GroupFilter
             groups={filterGroups}
-            selectedGroupId={selectedGroupId}
-            onSelect={setSelectedGroupId}
+            selectedGroupId={activeGroupId}
+            onSelect={handleGroupSelect}
             onManagePress={() => {
               // DES-19 will replace this placeholder with the real
               // group management UI.
@@ -193,6 +219,41 @@ export default function FriendsCalendar({
             <View style={{ width: layout.gridWidth }}>
               <View style={[styles.weekdayRow, { gap: layout.gap }]}>
                 {weekdayLabels.map((day, index) => (
+        <View style={styles.calendarFrame}>
+          <View style={styles.weekdayRow}>
+            {WEEKDAYS.map((day) => (
+              <Text key={day} style={styles.weekdayLabel}>
+                {day.toUpperCase()}
+              </Text>
+            ))}
+          </View>
+
+          <View style={styles.grid}>
+            {visibleDays.map((date) => {
+              const iso = ISO(date);
+              const inMonth = isSameMonth(date, viewMonth);
+              const todayCell = isSameDay(date, today);
+              const data = getDayData
+                ? getDayData(iso, activeGroupId)
+                : { date: iso, friendsInTown: 0, totalFriends: selectedTotalFriends };
+              const bg = getHeatmapColor(data.friendsInTown, data.totalFriends);
+              const dayNumber = format(date, 'd');
+
+              return (
+                <Pressable
+                  key={iso}
+                  onPress={() => handleDayPress(iso)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${format(date, 'EEEE, MMM d')} — ${data.friendsInTown} in town`}
+                  accessibilityHint="Tap to see which friends are in town"
+                  style={({ pressed, hovered }: any) => [
+                    styles.cell,
+                    { backgroundColor: bg },
+                    !inMonth && styles.cellOutsideMonth,
+                    todayCell && styles.cellToday,
+                    (pressed || hovered) && styles.cellHover,
+                  ]}
+                >
                   <Text
                     key={`${day}-${index}`}
                     style={[
@@ -349,6 +410,13 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     letterSpacing: typography.label.letterSpacing,
     color: colors.text.primary,
+  },
+  freshnessLabel: {
+    fontFamily: fontFamilies.inter.medium,
+    fontSize: typography.label.fontSize,
+    fontWeight: '500',
+    letterSpacing: typography.label.letterSpacing,
+    color: colors.text.secondary,
   },
   monthRow: {
     flexDirection: 'row',
