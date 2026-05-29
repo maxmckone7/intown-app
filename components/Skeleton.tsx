@@ -121,14 +121,61 @@ export function FriendsListSkeleton() {
 }
 
 /**
+ * My Calendar skeleton — mirrors the controls and personal calendar grid so
+ * first load and retry states keep the page layout stable.
+ */
+export function MyCalendarSkeleton() {
+  return (
+    <View style={styles.personalCalendarWrap}>
+      <Skeleton width={220} height={48} radius={8} />
+      <Skeleton width={260} height={18} radius={4} style={styles.personalSubtitle} />
+      <View style={styles.personalControls}>
+        <Skeleton width={180} height={36} radius={18} />
+        <Skeleton width={160} height={36} radius={18} />
+        <Skeleton width={84} height={36} radius={18} style={styles.personalToday} />
+      </View>
+      <CalendarSkeleton />
+    </View>
+  );
+}
+
+/**
+ * Invite card skeleton — used while the home screen is loading the prompt
+ * and calendar prerequisites.
+ */
+export function InviteCardSkeleton() {
+  return (
+    <View style={styles.inviteCard}>
+      <Skeleton width={180} height={28} radius={6} />
+      <Skeleton width={260} height={16} radius={4} style={styles.inviteSubtitle} />
+      <View style={styles.inviteInputRow}>
+        <Skeleton width="68%" height={48} radius={12} />
+        <Skeleton width={116} height={48} radius={12} />
+      </View>
+      <View style={styles.inviteActions}>
+        <Skeleton width="100%" height={52} radius={12} />
+        <Skeleton width="100%" height={52} radius={12} />
+      </View>
+    </View>
+  );
+}
+
+/**
  * Profile skeleton — large round avatar + name + email lines.
  */
 export function ProfileHeroSkeleton() {
   return (
-    <View style={styles.profileHero}>
-      <Skeleton width={120} height={120} radius={60} />
-      <Skeleton width={200} height={28} radius={6} style={styles.profileName} />
-      <Skeleton width={160} height={16} radius={4} style={styles.profileEmail} />
+    <View style={styles.profilePage}>
+      <View style={styles.profileHero}>
+        <Skeleton width={120} height={120} radius={60} />
+        <Skeleton width={200} height={28} radius={6} style={styles.profileName} />
+        <Skeleton width={160} height={16} radius={4} style={styles.profileEmail} />
+      </View>
+      <View style={styles.profileCard}>
+        <Skeleton width={180} height={28} radius={6} />
+        <Skeleton width="100%" height={72} radius={12} style={styles.profileField} />
+        <Skeleton width="100%" height={72} radius={12} style={styles.profileField} />
+      </View>
     </View>
   );
 }
@@ -165,6 +212,50 @@ const styles = StyleSheet.create({
     ...shadows.sm,
   },
 
+  personalCalendarWrap: {
+    flex: 1,
+    width: '100%',
+    maxWidth: 1200,
+    alignSelf: 'center',
+    paddingTop: spacing[7],
+    paddingHorizontal: spacing[4],
+  },
+  personalSubtitle: {
+    marginTop: spacing[2],
+  },
+  personalControls: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: spacing[2],
+    marginTop: spacing[5],
+  },
+  personalToday: {
+    marginLeft: 'auto',
+  },
+
+  inviteCard: {
+    width: '100%',
+    backgroundColor: colors.background.card,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border.subtle,
+    padding: spacing[5],
+    ...shadows.sm,
+  },
+  inviteSubtitle: {
+    marginTop: spacing[2],
+  },
+  inviteInputRow: {
+    flexDirection: 'row',
+    gap: spacing[3],
+    marginTop: spacing[5],
+  },
+  inviteActions: {
+    gap: spacing[3],
+    marginTop: spacing[4],
+  },
+
   listWrap: {
     paddingHorizontal: spacing[4],
     paddingTop: spacing[4],
@@ -185,15 +276,39 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
 
+  profilePage: {
+    width: '100%',
+    maxWidth: 960,
+    alignSelf: 'center',
+    gap: spacing[5],
+    paddingHorizontal: spacing[4],
+    paddingVertical: spacing[6],
+  },
   profileHero: {
     alignItems: 'center',
-    paddingTop: spacing[7],
+    backgroundColor: colors.background.card,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border.subtle,
+    padding: spacing[6],
     gap: spacing[3],
+    ...shadows.md,
   },
   profileName: {
     marginTop: spacing[2],
   },
   profileEmail: {
     marginTop: 0,
+  },
+  profileCard: {
+    backgroundColor: colors.background.card,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border.subtle,
+    padding: spacing[5],
+    ...shadows.sm,
+  },
+  profileField: {
+    marginTop: spacing[4],
   },
 });
