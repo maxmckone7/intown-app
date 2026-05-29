@@ -10,13 +10,16 @@ import { authService } from '../../services/auth';
 import { calendarService } from '../../services/calendar';
 import { friendGroupsService } from '../../services/friendGroups';
 import { friendsService } from '../../services/friends';
+import { privacyService } from '../../services/privacy';
 import { addFriendsPromptService } from '../../services/addFriendsPrompt';
 import {
   CalendarEntry,
   CalendarStatus,
   FriendGroup,
   FriendWithStatus,
+  VisibilityLevel,
 } from '../../lib/types';
+import { isFriendInTown, isFriendVisible } from '../../lib/heatmap';
 import InviteFriends from '../../components/InviteFriends';
 import FriendsCalendar from '../../components/FriendsCalendar';
 import { FilterGroup } from '../../components/GroupFilter';
@@ -32,6 +35,7 @@ export default function FriendsCalendarScreen() {
   const [friendEntries, setFriendEntries] = useState<
     Array<CalendarEntry & { friend_name: string; friend_id: string }>
   >([]);
+  const [visibility, setVisibility] = useState<Map<string, VisibilityLevel>>(new Map());
   const [loading, setLoading] = useState(true);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [showAddFriendsPrompt, setShowAddFriendsPrompt] = useState(false);
@@ -49,15 +53,18 @@ export default function FriendsCalendarScreen() {
         return;
       }
       setUserId(user.id);
-      const [friendsList, groupsList, entriesList, shouldShowPrompt] = await Promise.all([
-        friendsService.getFriends(user.id),
-        friendGroupsService.getGroups(user.id),
-        calendarService.getFriendsEntries(user.id),
-        addFriendsPromptService.shouldShow(user.id),
-      ]);
+      const [friendsList, groupsList, entriesList, visibilityMap, shouldShowPrompt] =
+        await Promise.all([
+          friendsService.getFriends(user.id),
+          friendGroupsService.getGroups(user.id),
+          calendarService.getFriendsEntries(user.id),
+          privacyService.getViewerVisibility(),
+          addFriendsPromptService.shouldShow(user.id),
+        ]);
       setFriends(friendsList);
       setFriendGroups(groupsList);
       setFriendEntries(entriesList);
+      setVisibility(visibilityMap);
       setShowAddFriendsPrompt(shouldShowPrompt);
     } catch (error: any) {
       Alert.alert('Error', error.message || 'Failed to load friends');
@@ -109,18 +116,23 @@ export default function FriendsCalendarScreen() {
         groupId === 'all'
           ? allFriendIds
           : groups.find((group) => group.id === groupId)?.friendIds ?? [];
+      // Friends who hid their calendar (or are appearing away) drop out of the
+      // count entirely; the rest are counted per their shared visibility level.
+      const visibleFriendIds = groupFriendIds.filter((friendId) =>
+        isFriendVisible(visibility.get(friendId))
+      );
       const dayStatuses = statusesByDate.get(isoDate);
-      const friendsInTown = groupFriendIds.filter(
-        (friendId) => dayStatuses?.get(friendId) !== 'out_of_town'
+      const friendsInTown = visibleFriendIds.filter((friendId) =>
+        isFriendInTown(visibility.get(friendId), dayStatuses?.get(friendId))
       ).length;
 
       return {
         date: isoDate,
         friendsInTown,
-        totalFriends: groupFriendIds.length,
+        totalFriends: visibleFriendIds.length,
       };
     },
-    [allFriendIds, groups, statusesByDate]
+    [allFriendIds, groups, statusesByDate, visibility]
   );
 
   if (loading) {
@@ -155,6 +167,7 @@ export default function FriendsCalendarScreen() {
         date={selectedDate}
         friends={friends}
         calendarEntries={friendEntries}
+        visibility={visibility}
         onClose={() => setSelectedDate(null)}
       />
     </>

@@ -21,6 +21,7 @@ import { supabase } from '../../lib/supabase';
 import { User } from '../../lib/types';
 import InviteFriends from '../../components/InviteFriends';
 import Button from '../../components/Button';
+import PrivacyModal from '../../components/PrivacyModal';
 import { useToast } from '../../components/ToastProvider';
 import {
   colors,
@@ -160,6 +161,7 @@ export default function ProfileScreen() {
   const [signingOut, setSigningOut] = useState(false);
   const [avatarUploading, setAvatarUploading] = useState(false);
   const [resettingPassword, setResettingPassword] = useState(false);
+  const [privacyOpen, setPrivacyOpen] = useState(false);
   const [name, setName] = useState('');
   const [location, setLocation] = useState('');
   const [interests, setInterests] = useState('');
@@ -371,6 +373,7 @@ export default function ProfileScreen() {
   const socialAccountCount = getSocialAccountCount(user.social_accounts);
 
   return (
+    <>
     <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
       <View style={styles.page}>
         <View style={styles.heroCard}>
@@ -604,6 +607,36 @@ export default function ProfileScreen() {
           </View>
         </View>
 
+        <View style={styles.sectionCard}>
+          <View style={styles.sectionHeader}>
+            <View style={styles.sectionHeaderCopy}>
+              <Text style={styles.sectionTitle}>Privacy &amp; Visibility</Text>
+              <Text style={styles.sectionSubtitle}>
+                Control who can see your availability, by friend or group.
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.accountRow}>
+            <View style={styles.accountIcon}>
+              <Feather name="eye" size={18} color={colors.brand.primary} />
+            </View>
+            <View style={styles.accountCopy}>
+              <Text style={styles.label}>Calendar visibility</Text>
+              <Text style={styles.accountDescription}>
+                Share full availability with some, less with others, or appear away.
+              </Text>
+            </View>
+            <Button
+              label="Manage"
+              variant="secondary"
+              size="sm"
+              onPress={() => setPrivacyOpen(true)}
+              style={styles.accountAction}
+            />
+          </View>
+        </View>
+
         <View style={styles.inviteCard}>
           <InviteFriends />
         </View>
@@ -627,6 +660,12 @@ export default function ProfileScreen() {
         </Pressable>
       </View>
     </ScrollView>
+    <PrivacyModal
+      visible={privacyOpen}
+      userId={user.id}
+      onClose={() => setPrivacyOpen(false)}
+    />
+    </>
   );
 }
 

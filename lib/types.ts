@@ -9,6 +9,16 @@ export interface CalendarEntry {
   updated_at: string;
 }
 
+/**
+ * How much of an owner's calendar a given viewer can see.
+ *   full    - every calendar entry (in_town and out_of_town)
+ *   limited - only the owner's in_town days; travel/away days stay private
+ *   hidden  - nothing
+ */
+export type VisibilityLevel = 'full' | 'limited' | 'hidden';
+
+export type VisibilityScope = 'friend' | 'group';
+
 export interface User {
   id: string;
   email: string;
@@ -17,7 +27,22 @@ export interface User {
   location?: string | null;
   interests?: string[] | null;
   social_accounts?: Record<string, string> | null;
+  /** Global "appear away" / invisible toggle — hides your calendar from everyone. */
+  appear_away?: boolean;
+  /** Visibility applied to friends without a more specific friend/group rule. */
+  default_visibility?: VisibilityLevel;
   created_at: string;
+}
+
+/** A per-friend or per-group override of the owner's default visibility. */
+export interface VisibilityRule {
+  id: string;
+  owner_id: string;
+  scope_type: VisibilityScope;
+  scope_id: string;
+  level: VisibilityLevel;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface Friendship {

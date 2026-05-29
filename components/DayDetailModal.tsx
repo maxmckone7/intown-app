@@ -20,7 +20,8 @@ import {
   spacing,
   typography,
 } from '../theme';
-import { CalendarEntry, FriendWithStatus } from '../lib/types';
+import { CalendarEntry, FriendWithStatus, VisibilityLevel } from '../lib/types';
+import { isFriendInTown, isFriendVisible } from '../lib/heatmap';
 import { useReducedMotion } from '../lib/use-reduced-motion';
 
 type Props = {
@@ -30,6 +31,8 @@ type Props = {
   /** Real friends list; availability is read from Supabase calendar entries. */
   friends: FriendWithStatus[];
   calendarEntries?: CalendarEntry[];
+  /** Each friend's visibility toward the viewer (defaults to 'full' when absent). */
+  visibility?: Map<string, VisibilityLevel>;
   onClose: () => void;
   onMessage?: (friendId: string) => void;
 };
@@ -43,6 +46,7 @@ export default function DayDetailModal({
   date,
   friends,
   calendarEntries = [],
+  visibility,
   onClose,
   onMessage,
 }: Props) {
@@ -90,6 +94,12 @@ export default function DayDetailModal({
     return () => document.removeEventListener('keydown', onKey);
   }, [visible, onClose]);
 
+  // Friends who hid their calendar from the viewer never appear here.
+  const visibleFriends = useMemo(
+    () => friends.filter((friend) => isFriendVisible(visibility?.get(friend.id))),
+    [friends, visibility]
+  );
+
   const inTownFriends = useMemo(() => {
     if (!date) return [];
     const statuses = new Map(
@@ -98,15 +108,17 @@ export default function DayDetailModal({
         .map((entry) => [entry.user_id, entry.status])
     );
 
-    return friends
-      .filter((friend) => statuses.get(friend.id) !== 'out_of_town')
+    return visibleFriends
+      .filter((friend) =>
+        isFriendInTown(visibility?.get(friend.id), statuses.get(friend.id))
+      )
       .map((friend) => ({ friend, status: 'In town' }));
-  }, [calendarEntries, date, friends]);
+  }, [calendarEntries, date, visibleFriends, visibility]);
 
   if (!date) return null;
 
   const headerDate = formatHeaderDate(date);
-  const totalFriends = friends.length;
+  const totalFriends = visibleFriends.length;
   const inTownCount = inTownFriends.length;
   const subtitle =
     totalFriends === 0

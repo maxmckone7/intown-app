@@ -68,6 +68,12 @@ This will create:
 - Triggers for automatic user profile creation and `updated_at` maintenance
 - RPC helpers such as `accept_invite`
 
+7. Repeat steps 2–6 with `database/privacy.sql` to enable per-friend and
+   per-group calendar privacy controls. This adds the `calendar_visibility`
+   table, the `appear_away`/`default_visibility` columns on `users`, the
+   `effective_calendar_visibility` / `my_friends_visibility` functions, and
+   updates the calendar read policy to honor visibility levels.
+
 ## Step 6: Configure Authentication (Optional but Recommended)
 
 ### For Google Login:
