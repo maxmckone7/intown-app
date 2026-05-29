@@ -7,6 +7,7 @@ import {
   StyleSheet,
   View,
 } from 'react-native';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { format } from 'date-fns';
 import { useRouter } from 'expo-router';
 import { supabase } from '../../lib/supabase';
@@ -36,6 +37,10 @@ type FriendCalendarEntry = CalendarEntry & {
   friend_id: string;
 };
 
+const getSingleParam = (value?: string | string[]) =>
+  Array.isArray(value) ? value[0] : value;
+
+const isIsoDate = (value: string) => /^\d{4}-\d{2}-\d{2}$/.test(value);
 type SelectedDay = {
   date: string;
   groupId: string;
@@ -71,6 +76,12 @@ function openEmail(recipients: string[], subject: string, body: string) {
 
 export default function FriendsCalendarScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams<{
+    date?: string | string[];
+    groupId?: string | string[];
+  }>();
+  const routeDate = getSingleParam(params.date);
+  const routeGroupId = getSingleParam(params.groupId);
   const [userId, setUserId] = useState<string | null>(null);
   const [friends, setFriends] = useState<FriendWithStatus[]>([]);
   const [friendGroups, setFriendGroups] = useState<FriendGroup[]>([]);
@@ -79,6 +90,8 @@ export default function FriendsCalendarScreen() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [lastUpdatedAt, setLastUpdatedAt] = useState<Date | null>(null);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [selectedGroupId, setSelectedGroupId] = useState<string>('all');
   const [selectedDay, setSelectedDay] = useState<SelectedDay | null>(null);
   const [showAddFriendsPrompt, setShowAddFriendsPrompt] = useState(false);
 
@@ -113,6 +126,17 @@ export default function FriendsCalendarScreen() {
   );
 
   const loadUserAndFriends = useCallback(async () => {
+  useEffect(() => {
+    if (routeDate && isIsoDate(routeDate)) {
+      setSelectedDate(routeDate);
+    }
+
+    if (routeGroupId) {
+      setSelectedGroupId(routeGroupId);
+    }
+  }, [routeDate, routeGroupId]);
+
+  const loadUserAndFriends = async () => {
     try {
       const user = await authService.getCurrentUser();
       if (!user) {
@@ -317,6 +341,8 @@ export default function FriendsCalendarScreen() {
         <FriendsCalendar
           totalFriends={friends.length}
           groups={groups}
+          selectedGroupId={selectedGroupId}
+          onSelectGroup={setSelectedGroupId}
           getDayData={getDayData}
           lastUpdatedAt={lastUpdatedAt}
           isRefreshing={isRefreshing}
