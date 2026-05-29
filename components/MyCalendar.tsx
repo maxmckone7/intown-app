@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Platform,
   Pressable,
@@ -35,8 +35,12 @@ import { CalendarStatus } from '../lib/types';
 
 type DayStatus = 'in_town' | 'away';
 type PersonalStatusMap = Record<string, DayStatus>;
+type SaveStatus = 'saving' | 'saved' | 'error';
+type SaveStatusMap = Record<string, SaveStatus>;
 
 const DEFAULT_DAY_STATUS: DayStatus = 'in_town';
+const SAVE_RETRY_DELAYS_MS = [700, 1600, 3200];
+const SAVED_STATE_VISIBLE_MS = 1600;
 
 const dayStatusToCalendarStatus = (s: DayStatus): CalendarStatus =>
   s === 'in_town' ? 'in_town' : 'out_of_town';
@@ -44,8 +48,43 @@ const dayStatusToCalendarStatus = (s: DayStatus): CalendarStatus =>
 const calendarStatusToDayStatus = (s: CalendarStatus): DayStatus =>
   s === 'in_town' ? 'in_town' : 'away';
 
+const statusMessage = (status: DayStatus) =>
+  status === 'in_town' ? 'Status updated — in town' : 'Status updated — away';
+
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const ISO = (d: Date) => format(d, 'yyyy-MM-dd');
+
+const wait = (ms: number) =>
+  new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+
+async function saveStatusWithRetry(
+  userId: string,
+  iso: string,
+  status: DayStatus
+) {
+  let lastError: unknown;
+
+  for (let attempt = 0; attempt <= SAVE_RETRY_DELAYS_MS.length; attempt += 1) {
+    try {
+      return await calendarService.setEntry(
+        userId,
+        iso,
+        dayStatusToCalendarStatus(status)
+      );
+    } catch (err) {
+      lastError = err;
+      const retryDelay = SAVE_RETRY_DELAYS_MS[attempt];
+      if (retryDelay === undefined) {
+        throw err;
+      }
+      await wait(retryDelay);
+    }
+  }
+
+  throw lastError;
+}
 
 function showComingSoon(label: string) {
   if (Platform.OS === 'web' && typeof window !== 'undefined' && window.alert) {
@@ -57,8 +96,141 @@ export default function MyCalendar() {
   const today = startOfToday();
   const [viewMonth, setViewMonth] = useState<Date>(startOfMonth(today));
   const [statusByDate, setStatusByDate] = useState<PersonalStatusMap>({});
+  const [saveStateByDate, setSaveStateByDate] = useState<SaveStatusMap>({});
   const [userId, setUserId] = useState<string | null>(null);
   const toast = useToast();
+
+  const mountedRef = useRef(true);
+  const userIdRef = useRef<string | null>(null);
+  const statusByDateRef = useRef<PersonalStatusMap>({});
+  const serverStatusByDateRef = useRef<PersonalStatusMap>({});
+  const pendingSaveByDateRef = useRef<Partial<PersonalStatusMap>>({});
+  const savingByDateRef = useRef<Record<string, boolean>>({});
+  const inFlightSaveByDateRef = useRef<Partial<PersonalStatusMap>>({});
+  const saveStateTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>(
+    {}
+  );
+
+  const clearSaveStateTimer = useCallback((iso: string) => {
+    const timer = saveStateTimersRef.current[iso];
+    if (timer) {
+      clearTimeout(timer);
+      delete saveStateTimersRef.current[iso];
+    }
+  }, []);
+
+  const setSaveStateForDate = useCallback(
+    (iso: string, state: SaveStatus | null) => {
+      if (!mountedRef.current) return;
+
+      clearSaveStateTimer(iso);
+      setSaveStateByDate((prev) => {
+        const next = { ...prev };
+        if (state) {
+          next[iso] = state;
+        } else {
+          delete next[iso];
+        }
+        return next;
+      });
+
+      if (state === 'saved') {
+        saveStateTimersRef.current[iso] = setTimeout(() => {
+          if (!mountedRef.current) return;
+          setSaveStateByDate((prev) => {
+            if (prev[iso] !== 'saved') return prev;
+            const next = { ...prev };
+            delete next[iso];
+            return next;
+          });
+          delete saveStateTimersRef.current[iso];
+        }, SAVED_STATE_VISIBLE_MS);
+      }
+    },
+    [clearSaveStateTimer]
+  );
+
+  const replaceStatusMap = useCallback((next: PersonalStatusMap) => {
+    statusByDateRef.current = next;
+    if (mountedRef.current) {
+      setStatusByDate(next);
+    }
+  }, []);
+
+  const updateStatusForDate = useCallback((iso: string, status: DayStatus) => {
+    const next = { ...statusByDateRef.current, [iso]: status };
+    replaceStatusMap(next);
+  }, [replaceStatusMap]);
+
+  const processSaveForDate = useCallback(
+    async (iso: string) => {
+      if (savingByDateRef.current[iso]) return;
+
+      const currentUserId = userIdRef.current;
+      if (!currentUserId) return;
+
+      const desired = pendingSaveByDateRef.current[iso];
+      if (!desired) return;
+
+      delete pendingSaveByDateRef.current[iso];
+      savingByDateRef.current[iso] = true;
+      inFlightSaveByDateRef.current[iso] = desired;
+      setSaveStateForDate(iso, 'saving');
+
+      try {
+        await saveStatusWithRetry(currentUserId, iso, desired);
+        if (!mountedRef.current) return;
+
+        serverStatusByDateRef.current = {
+          ...serverStatusByDateRef.current,
+          [iso]: desired,
+        };
+        delete inFlightSaveByDateRef.current[iso];
+        delete savingByDateRef.current[iso];
+
+        if (pendingSaveByDateRef.current[iso]) {
+          void processSaveForDate(iso);
+          return;
+        }
+
+        setSaveStateForDate(iso, 'saved');
+        toast.success(statusMessage(desired));
+      } catch (err: any) {
+        if (!mountedRef.current) return;
+
+        delete inFlightSaveByDateRef.current[iso];
+        delete savingByDateRef.current[iso];
+
+        if (pendingSaveByDateRef.current[iso]) {
+          void processSaveForDate(iso);
+          return;
+        }
+
+        const rollback =
+          serverStatusByDateRef.current[iso] ?? DEFAULT_DAY_STATUS;
+        updateStatusForDate(iso, rollback);
+        setSaveStateForDate(iso, 'error');
+        toast.show(err?.message || 'Failed to save status. Your change was reverted.', {
+          variant: 'info',
+        });
+      }
+    },
+    [setSaveStateForDate, toast, updateStatusForDate]
+  );
+
+  const flushPendingSaves = useCallback(() => {
+    Object.keys(pendingSaveByDateRef.current).forEach((iso) => {
+      void processSaveForDate(iso);
+    });
+  }, [processSaveForDate]);
+
+  useEffect(() => {
+    return () => {
+      mountedRef.current = false;
+      Object.values(saveStateTimersRef.current).forEach(clearTimeout);
+      saveStateTimersRef.current = {};
+    };
+  }, []);
 
   // Load the user's existing entries from Supabase on mount so toggles
   // persist across navigation and page reloads (ENG-84).
@@ -68,14 +240,27 @@ export default function MyCalendar() {
       try {
         const user = await authService.getCurrentUser();
         if (!user || !mounted) return;
-        setUserId(user.id);
         const entries = await calendarService.getEntries(user.id);
         if (!mounted) return;
         const map: PersonalStatusMap = {};
         for (const e of entries) {
           map[e.date] = calendarStatusToDayStatus(e.status);
         }
-        setStatusByDate(map);
+        serverStatusByDateRef.current = map;
+        const optimisticMap = { ...map };
+        for (const [date, status] of Object.entries(
+          inFlightSaveByDateRef.current
+        )) {
+          if (status) optimisticMap[date] = status;
+        }
+        for (const [date, status] of Object.entries(
+          pendingSaveByDateRef.current
+        )) {
+          if (status) optimisticMap[date] = status;
+        }
+        replaceStatusMap(optimisticMap);
+        userIdRef.current = user.id;
+        setUserId(user.id);
       } catch (err: any) {
         if (mounted) {
           toast.show(err?.message || 'Failed to load your calendar', {
@@ -91,6 +276,12 @@ export default function MyCalendar() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  useEffect(() => {
+    if (userId) {
+      flushPendingSaves();
+    }
+  }, [flushPendingSaves, userId]);
+
   const visibleDays = useMemo(() => {
     const gridStart = startOfWeek(startOfMonth(viewMonth), { weekStartsOn: 0 });
     const gridEnd = endOfWeek(endOfMonth(viewMonth), { weekStartsOn: 0 });
@@ -101,40 +292,53 @@ export default function MyCalendar() {
   const goNext = () => setViewMonth((d) => addMonths(d, 1));
   const goToday = () => setViewMonth(startOfMonth(today));
 
-  const toggleDay = async (iso: string) => {
-    const current = statusByDate[iso] ?? DEFAULT_DAY_STATUS;
+  const toggleDay = (iso: string) => {
+    const current = statusByDateRef.current[iso] ?? DEFAULT_DAY_STATUS;
     const next: DayStatus = current === 'in_town' ? 'away' : 'in_town';
 
     // Optimistically flip the cell so the UI feels instant.
-    setStatusByDate((prev) => ({ ...prev, [iso]: next }));
-
-    if (!userId) {
-      // Entries haven't loaded yet (or auth not resolved). Don't persist;
-      // the optimistic flip will be reconciled on next mount.
-      toast.success(
-        next === 'in_town' ? 'Status updated — in town' : 'Status updated — away'
-      );
-      return;
-    }
-
-    try {
-      await calendarService.setEntry(
-        userId,
-        iso,
-        dayStatusToCalendarStatus(next)
-      );
-      toast.success(
-        next === 'in_town' ? 'Status updated — in town' : 'Status updated — away'
-      );
-    } catch (err: any) {
-      // Revert local state if the save fails so the UI matches the server.
-      setStatusByDate((prev) => ({ ...prev, [iso]: current }));
-      toast.show(err?.message || 'Failed to save status', { variant: 'info' });
-    }
+    updateStatusForDate(iso, next);
+    pendingSaveByDateRef.current = {
+      ...pendingSaveByDateRef.current,
+      [iso]: next,
+    };
+    setSaveStateForDate(iso, 'saving');
+    void processSaveForDate(iso);
   };
 
   const statusFor = (iso: string): DayStatus =>
     statusByDate[iso] ?? DEFAULT_DAY_STATUS;
+
+  const saveSummary = useMemo(() => {
+    const states = Object.values(saveStateByDate);
+    const savingCount = states.filter((state) => state === 'saving').length;
+
+    if (savingCount > 0) {
+      return {
+        text:
+          savingCount === 1
+            ? 'Saving change...'
+            : `Saving ${savingCount} changes...`,
+        status: 'saving' as SaveStatus,
+      };
+    }
+
+    if (states.includes('error')) {
+      return {
+        text: 'Some changes were not saved',
+        status: 'error' as SaveStatus,
+      };
+    }
+
+    if (states.includes('saved')) {
+      return {
+        text: 'All changes saved',
+        status: 'saved' as SaveStatus,
+      };
+    }
+
+    return null;
+  }, [saveStateByDate]);
 
   return (
     <ScrollView
@@ -176,6 +380,25 @@ export default function MyCalendar() {
               </Text>
             </Pressable>
           </View>
+          {saveSummary && (
+            <View
+              style={[
+                styles.saveSummary,
+                saveSummary.status === 'error' && styles.saveSummaryError,
+                saveSummary.status === 'saved' && styles.saveSummarySaved,
+              ]}
+            >
+              <Text
+                style={[
+                  styles.saveSummaryText,
+                  saveSummary.status === 'error' && styles.saveSummaryTextError,
+                  saveSummary.status === 'saved' && styles.saveSummaryTextSaved,
+                ]}
+              >
+                {saveSummary.text}
+              </Text>
+            </View>
+          )}
           <Pressable
             onPress={goToday}
             style={({ pressed, hovered }: any) => [
@@ -228,28 +451,61 @@ export default function MyCalendar() {
               const inMonth = isSameMonth(date, viewMonth);
               const todayCell = isSameDay(date, today);
               const status = statusFor(iso);
+              const saveState = saveStateByDate[iso];
               const bg =
                 status === 'in_town' ? colors.heatmap.high : colors.heatmap.low;
               const dayNumber = format(date, 'd');
               const statusLabel = status === 'in_town' ? 'In Town' : 'Away';
+              const saveLabel =
+                saveState === 'saving'
+                  ? 'Saving...'
+                  : saveState === 'saved'
+                    ? 'Saved'
+                    : saveState === 'error'
+                      ? 'Not saved'
+                      : null;
 
               return (
                 <Pressable
                   key={iso}
                   onPress={() => toggleDay(iso)}
                   accessibilityRole="button"
-                  accessibilityLabel={`${format(date, 'EEEE, MMM d')} — ${statusLabel}`}
+                  accessibilityLabel={`${format(date, 'EEEE, MMM d')} — ${statusLabel}${
+                    saveLabel ? ` — ${saveLabel}` : ''
+                  }`}
                   accessibilityHint="Tap to toggle in town or away"
                   style={({ pressed, hovered }: any) => [
                     styles.cell,
                     { backgroundColor: bg },
                     !inMonth && styles.cellOutsideMonth,
                     todayCell && styles.cellToday,
+                    saveState === 'saving' && styles.cellSaving,
+                    saveState === 'error' && styles.cellSaveError,
                     hovered && styles.cellHover,
                     pressed && styles.cellPressed,
                   ]}
                 >
                   <View style={styles.cellInnerStroke} pointerEvents="none" />
+                  {saveLabel && (
+                    <View
+                      pointerEvents="none"
+                      style={[
+                        styles.saveBadge,
+                        saveState === 'saved' && styles.saveBadgeSaved,
+                        saveState === 'error' && styles.saveBadgeError,
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.saveBadgeText,
+                          saveState === 'error' && styles.saveBadgeTextError,
+                        ]}
+                        numberOfLines={1}
+                      >
+                        {saveLabel}
+                      </Text>
+                    </View>
+                  )}
                   <Text
                     style={[
                       styles.dayNumber,
@@ -352,6 +608,35 @@ const styles = StyleSheet.create({
     fontSize: typography.label.fontSize,
     fontWeight: '600',
     letterSpacing: typography.label.letterSpacing,
+  },
+  saveSummary: {
+    paddingHorizontal: spacing[3],
+    paddingVertical: spacing[2],
+    borderRadius: radius.full,
+    backgroundColor: 'rgba(233, 78, 119, 0.10)',
+    borderWidth: 1,
+    borderColor: 'rgba(233, 78, 119, 0.22)',
+  },
+  saveSummarySaved: {
+    backgroundColor: 'rgba(134, 167, 137, 0.14)',
+    borderColor: 'rgba(134, 167, 137, 0.35)',
+  },
+  saveSummaryError: {
+    backgroundColor: 'rgba(196, 90, 77, 0.14)',
+    borderColor: 'rgba(196, 90, 77, 0.35)',
+  },
+  saveSummaryText: {
+    fontFamily: fontFamilies.inter.medium,
+    fontSize: typography.label.fontSize,
+    fontWeight: '600',
+    letterSpacing: typography.label.letterSpacing,
+    color: colors.brand.primary,
+  },
+  saveSummaryTextSaved: {
+    color: '#4D6A50',
+  },
+  saveSummaryTextError: {
+    color: '#8A3B32',
   },
   todayPill: {
     paddingHorizontal: spacing[3],
@@ -456,6 +741,12 @@ const styles = StyleSheet.create({
     borderColor: colors.brand.primary,
     ...shadows.md,
   },
+  cellSaving: {
+    borderColor: colors.brand.primary,
+  },
+  cellSaveError: {
+    borderColor: '#8A3B32',
+  },
   cellHover: {
     ...shadows.md,
   },
@@ -473,5 +764,30 @@ const styles = StyleSheet.create({
     ...typography.calendar.meta,
     color: 'rgba(255, 255, 255, 0.9)',
     alignSelf: 'flex-end',
+  },
+  saveBadge: {
+    position: 'absolute',
+    top: spacing[2],
+    right: spacing[2],
+    borderRadius: radius.full,
+    paddingHorizontal: spacing[2],
+    paddingVertical: 2,
+    backgroundColor: 'rgba(255, 255, 255, 0.82)',
+  },
+  saveBadgeSaved: {
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+  },
+  saveBadgeError: {
+    backgroundColor: 'rgba(255, 246, 244, 0.95)',
+  },
+  saveBadgeText: {
+    fontFamily: fontFamilies.inter.medium,
+    fontSize: 10,
+    fontWeight: '700',
+    color: colors.brand.primary,
+    letterSpacing: 0.2,
+  },
+  saveBadgeTextError: {
+    color: '#8A3B32',
   },
 });
