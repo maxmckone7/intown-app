@@ -1,11 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  View,
-  StyleSheet,
   Alert,
+  Linking,
+  Platform,
   ScrollView,
+  StyleSheet,
+  View,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { format } from 'date-fns';
 import { authService } from '../../services/auth';
 import { calendarService } from '../../services/calendar';
 import { friendGroupsService } from '../../services/friendGroups';
@@ -28,6 +31,38 @@ const getSingleParam = (value?: string | string[]) =>
   Array.isArray(value) ? value[0] : value;
 
 const isIsoDate = (value: string) => /^\d{4}-\d{2}-\d{2}$/.test(value);
+type SelectedDay = {
+  date: string;
+  groupId: string;
+};
+
+function showAlert(title: string, message: string) {
+  if (Platform.OS === 'web' && typeof window !== 'undefined' && window.alert) {
+    window.alert(`${title}\n\n${message}`);
+    return;
+  }
+  Alert.alert(title, message);
+}
+
+function formatDayForMessage(isoDate: string): string {
+  return format(new Date(`${isoDate}T00:00:00`), 'EEEE, MMM d');
+}
+
+function openEmail(recipients: string[], subject: string, body: string) {
+  const uniqueRecipients = Array.from(new Set(recipients.filter(Boolean)));
+  if (uniqueRecipients.length === 0) {
+    showAlert('No email available', 'This friend does not have an email address.');
+    return;
+  }
+
+  const url = `mailto:${uniqueRecipients.join(',')}?subject=${encodeURIComponent(
+    subject
+  )}&body=${encodeURIComponent(body)}`;
+
+  Linking.openURL(url).catch(() => {
+    showAlert('Message unavailable', 'Could not open your email app.');
+  });
+}
 
 export default function FriendsCalendarScreen() {
   const router = useRouter();
@@ -44,8 +79,8 @@ export default function FriendsCalendarScreen() {
     Array<CalendarEntry & { friend_name: string; friend_id: string }>
   >([]);
   const [loading, setLoading] = useState(true);
-  const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [selectedGroupId, setSelectedGroupId] = useState<string>('all');
+  const [selectedDay, setSelectedDay] = useState<SelectedDay | null>(null);
   const [showAddFriendsPrompt, setShowAddFriendsPrompt] = useState(false);
 
   useEffect(() => {
@@ -54,7 +89,7 @@ export default function FriendsCalendarScreen() {
 
   useEffect(() => {
     if (routeDate && isIsoDate(routeDate)) {
-      setSelectedDate(routeDate);
+      setSelectedDay({ date: routeDate, groupId: routeGroupId || 'all' });
     }
 
     if (routeGroupId) {
@@ -112,21 +147,19 @@ export default function FriendsCalendarScreen() {
 
   const allFriendIds = useMemo(() => friends.map((friend) => friend.id), [friends]);
 
-  const selectedGroupFriendIds = useMemo(
-    () =>
-      selectedGroupId === 'all'
-        ? allFriendIds
-        : groups.find((group) => group.id === selectedGroupId)?.friendIds ?? [],
-    [allFriendIds, groups, selectedGroupId]
+  const selectedGroup = useMemo(
+    () => groups.find((group) => group.id === selectedDay?.groupId),
+    [groups, selectedDay?.groupId]
   );
 
-  const modalFriends = useMemo(
-    () =>
-      selectedGroupId === 'all'
-        ? friends
-        : friends.filter((friend) => selectedGroupFriendIds.includes(friend.id)),
-    [friends, selectedGroupFriendIds, selectedGroupId]
-  );
+  const dayDetailFriends = useMemo(() => {
+    if (!selectedDay || selectedDay.groupId === 'all') {
+      return friends;
+    }
+
+    const groupFriendIds = new Set(selectedGroup?.friendIds ?? []);
+    return friends.filter((friend) => groupFriendIds.has(friend.id));
+  }, [friends, selectedDay, selectedGroup?.friendIds]);
 
   const statusesByDate = useMemo(() => {
     const byDate = new Map<string, Map<string, CalendarStatus>>();
@@ -161,6 +194,35 @@ export default function FriendsCalendarScreen() {
     [allFriendIds, groups, statusesByDate]
   );
 
+  const handleMessageFriend = useCallback(
+    (friend: FriendWithStatus, date: string) => {
+      const displayDate = formatDayForMessage(date);
+      const friendName = friend.name || friend.email;
+      openEmail(
+        [friend.email],
+        `InTown on ${displayDate}`,
+        `Hey ${friendName}, I saw you're in town on ${displayDate}. Want to catch up?`
+      );
+    },
+    []
+  );
+
+  const handleProposeHangout = useCallback(
+    (availableFriends: FriendWithStatus[], date: string) => {
+      const displayDate = formatDayForMessage(date);
+      const names = availableFriends
+        .map((friend) => friend.name || friend.email)
+        .join(', ');
+
+      openEmail(
+        availableFriends.map((friend) => friend.email),
+        `Hang out on ${displayDate}?`,
+        `Hey${names ? ` ${names}` : ''}, looks like we're all in town on ${displayDate}. Want to plan something?`
+      );
+    },
+    []
+  );
+
   if (loading) {
     return (
       <View style={styles.container}>
@@ -181,7 +243,7 @@ export default function FriendsCalendarScreen() {
           selectedGroupId={selectedGroupId}
           onSelectGroup={setSelectedGroupId}
           getDayData={getDayData}
-          onDayPress={(iso) => setSelectedDate(iso)}
+          onDayPress={(iso, groupId) => setSelectedDay({ date: iso, groupId })}
           onAddFriendsPress={handleAddFriendsPress}
           showEmptyStatePrompt={showAddFriendsPrompt}
           onDismissEmptyState={dismissAddFriendsPrompt}
@@ -191,11 +253,14 @@ export default function FriendsCalendarScreen() {
         </View>
       </ScrollView>
       <DayDetailModal
-        visible={selectedDate !== null}
-        date={selectedDate}
-        friends={modalFriends}
+        visible={selectedDay !== null}
+        date={selectedDay?.date ?? null}
+        friends={dayDetailFriends}
+        groupLabel={selectedGroup?.label}
         calendarEntries={friendEntries}
-        onClose={() => setSelectedDate(null)}
+        onClose={() => setSelectedDay(null)}
+        onMessage={handleMessageFriend}
+        onProposeHangout={handleProposeHangout}
       />
     </>
   );
