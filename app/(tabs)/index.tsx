@@ -6,6 +6,7 @@ import {
   ScrollView,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { supabase } from '../../lib/supabase';
 import { authService } from '../../services/auth';
 import { calendarService } from '../../services/calendar';
 import { friendGroupsService } from '../../services/friendGroups';
@@ -24,23 +25,57 @@ import DayDetailModal from '../../components/DayDetailModal';
 import { CalendarSkeleton } from '../../components/Skeleton';
 import { colors } from '../../theme';
 
+const HEATMAP_POLL_INTERVAL_MS = 10000;
+const REALTIME_REFRESH_DEBOUNCE_MS = 250;
+
+type FriendCalendarEntry = CalendarEntry & {
+  friend_name: string;
+  friend_id: string;
+};
+
 export default function FriendsCalendarScreen() {
   const router = useRouter();
   const [userId, setUserId] = useState<string | null>(null);
   const [friends, setFriends] = useState<FriendWithStatus[]>([]);
   const [friendGroups, setFriendGroups] = useState<FriendGroup[]>([]);
-  const [friendEntries, setFriendEntries] = useState<
-    Array<CalendarEntry & { friend_name: string; friend_id: string }>
-  >([]);
+  const [friendEntries, setFriendEntries] = useState<FriendCalendarEntry[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [lastUpdatedAt, setLastUpdatedAt] = useState<Date | null>(null);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [showAddFriendsPrompt, setShowAddFriendsPrompt] = useState(false);
 
-  useEffect(() => {
-    loadUserAndFriends();
-  }, []);
+  const refreshFriendEntries = useCallback(
+    async (
+      currentUserId: string,
+      options: { showRefreshing?: boolean; showErrors?: boolean } = {}
+    ) => {
+      const { showRefreshing = false, showErrors = false } = options;
 
-  const loadUserAndFriends = async () => {
+      try {
+        if (showRefreshing) {
+          setIsRefreshing(true);
+        }
+
+        const entriesList = await calendarService.getFriendsEntries(currentUserId);
+        setFriendEntries(entriesList);
+        setLastUpdatedAt(new Date());
+      } catch (error: any) {
+        if (showErrors) {
+          Alert.alert('Error', error.message || 'Failed to refresh availability');
+        } else if (__DEV__) {
+          console.warn('Failed to refresh heatmap availability:', error);
+        }
+      } finally {
+        if (showRefreshing) {
+          setIsRefreshing(false);
+        }
+      }
+    },
+    []
+  );
+
+  const loadUserAndFriends = useCallback(async () => {
     try {
       const user = await authService.getCurrentUser();
       if (!user) {
@@ -48,6 +83,7 @@ export default function FriendsCalendarScreen() {
         setShowAddFriendsPrompt(false);
         return;
       }
+
       setUserId(user.id);
       const [friendsList, groupsList, entriesList, shouldShowPrompt] = await Promise.all([
         friendsService.getFriends(user.id),
@@ -58,13 +94,74 @@ export default function FriendsCalendarScreen() {
       setFriends(friendsList);
       setFriendGroups(groupsList);
       setFriendEntries(entriesList);
+      setLastUpdatedAt(new Date());
       setShowAddFriendsPrompt(shouldShowPrompt);
     } catch (error: any) {
       Alert.alert('Error', error.message || 'Failed to load friends');
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    void loadUserAndFriends();
+  }, [loadUserAndFriends]);
+
+  useEffect(() => {
+    if (!userId || friends.length === 0) {
+      return undefined;
+    }
+
+    const interval = setInterval(() => {
+      void refreshFriendEntries(userId);
+    }, HEATMAP_POLL_INTERVAL_MS);
+
+    return () => clearInterval(interval);
+  }, [friends.length, refreshFriendEntries, userId]);
+
+  useEffect(() => {
+    if (!userId || friends.length === 0 || typeof supabase.channel !== 'function') {
+      return undefined;
+    }
+
+    let refreshTimer: ReturnType<typeof setTimeout> | null = null;
+    const scheduleRefresh = () => {
+      if (refreshTimer) {
+        clearTimeout(refreshTimer);
+      }
+
+      refreshTimer = setTimeout(() => {
+        void refreshFriendEntries(userId, { showRefreshing: true });
+      }, REALTIME_REFRESH_DEBOUNCE_MS);
+    };
+
+    const channel = supabase.channel(`friends-calendar:${userId}`);
+    friends.forEach((friend) => {
+      channel.on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'calendar_entries',
+          filter: `user_id=eq.${friend.id}`,
+        },
+        scheduleRefresh
+      );
+    });
+    channel.subscribe();
+
+    return () => {
+      if (refreshTimer) {
+        clearTimeout(refreshTimer);
+      }
+
+      if (typeof supabase.removeChannel === 'function') {
+        void supabase.removeChannel(channel);
+      } else if (typeof channel.unsubscribe === 'function') {
+        void channel.unsubscribe();
+      }
+    };
+  }, [friends, refreshFriendEntries, userId]);
 
   const dismissAddFriendsPrompt = () => {
     setShowAddFriendsPrompt(false);
@@ -141,6 +238,8 @@ export default function FriendsCalendarScreen() {
           totalFriends={friends.length}
           groups={groups}
           getDayData={getDayData}
+          lastUpdatedAt={lastUpdatedAt}
+          isRefreshing={isRefreshing}
           onDayPress={(iso) => setSelectedDate(iso)}
           onAddFriendsPress={handleAddFriendsPress}
           showEmptyStatePrompt={showAddFriendsPrompt}
