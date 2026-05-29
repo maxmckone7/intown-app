@@ -86,7 +86,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 2,
   },
   pill: {
-    height: 36,
+    minHeight: 44,
     paddingHorizontal: spacing[4],
     paddingVertical: spacing[2],
     borderRadius: radius.full,
@@ -118,7 +118,7 @@ const styles = StyleSheet.create({
     width: spacing[2],
   },
   managePill: {
-    height: 36,
+    minHeight: 44,
     paddingHorizontal: spacing[4],
     paddingVertical: spacing[2],
     borderRadius: radius.full,

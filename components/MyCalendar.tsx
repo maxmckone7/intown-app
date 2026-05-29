@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Platform,
   Pressable,
@@ -6,7 +7,9 @@ import {
   StyleSheet,
   Text,
   View,
+  useWindowDimensions,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   addMonths,
   eachDayOfInterval,
@@ -37,11 +40,16 @@ import { authService } from '../services/auth';
 import { calendarService } from '../services/calendar';
 import { addFriendsPromptService } from '../services/addFriendsPrompt';
 import { CalendarStatus } from '../lib/types';
+import { getCalendarLayout } from './calendarLayout';
 
 type DayStatus = 'in_town' | 'away';
 type PersonalStatusMap = Record<string, DayStatus>;
+type SaveStatus = 'saving' | 'saved' | 'error';
+type SaveStatusMap = Record<string, SaveStatus>;
 
 const DEFAULT_DAY_STATUS: DayStatus = 'in_town';
+const SAVE_RETRY_DELAYS_MS = [700, 1600, 3200];
+const SAVED_STATE_VISIBLE_MS = 1600;
 
 const dayStatusToCalendarStatus = (s: DayStatus): CalendarStatus =>
   s === 'in_town' ? 'in_town' : 'out_of_town';
@@ -49,8 +57,43 @@ const dayStatusToCalendarStatus = (s: DayStatus): CalendarStatus =>
 const calendarStatusToDayStatus = (s: CalendarStatus): DayStatus =>
   s === 'in_town' ? 'in_town' : 'away';
 
+const statusMessage = (status: DayStatus) =>
+  status === 'in_town' ? 'Status updated — in town' : 'Status updated — away';
+
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const ISO = (d: Date) => format(d, 'yyyy-MM-dd');
+
+const wait = (ms: number) =>
+  new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+
+async function saveStatusWithRetry(
+  userId: string,
+  iso: string,
+  status: DayStatus
+) {
+  let lastError: unknown;
+
+  for (let attempt = 0; attempt <= SAVE_RETRY_DELAYS_MS.length; attempt += 1) {
+    try {
+      return await calendarService.setEntry(
+        userId,
+        iso,
+        dayStatusToCalendarStatus(status)
+      );
+    } catch (err) {
+      lastError = err;
+      const retryDelay = SAVE_RETRY_DELAYS_MS[attempt];
+      if (retryDelay === undefined) {
+        throw err;
+      }
+      await wait(retryDelay);
+    }
+  }
+
+  throw lastError;
+}
 
 function showComingSoon(label: string) {
   if (Platform.OS === 'web' && typeof window !== 'undefined' && window.alert) {
@@ -61,8 +104,12 @@ function showComingSoon(label: string) {
 export default function MyCalendar() {
   const today = useMemo(() => startOfToday(), []);
   const router = useRouter();
+  const today = startOfToday();
+  const { width } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
   const [viewMonth, setViewMonth] = useState<Date>(startOfMonth(today));
   const [statusByDate, setStatusByDate] = useState<PersonalStatusMap>({});
+  const [saveStateByDate, setSaveStateByDate] = useState<SaveStatusMap>({});
   const [userId, setUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -73,6 +120,142 @@ export default function MyCalendar() {
   const [completingManualOnboarding, setCompletingManualOnboarding] =
     useState(false);
   const toast = useToast();
+  const layout = useMemo(
+    () => getCalendarLayout(width, { left: insets.left, right: insets.right }),
+    [insets.left, insets.right, width]
+  );
+
+  const mountedRef = useRef(true);
+  const userIdRef = useRef<string | null>(null);
+  const statusByDateRef = useRef<PersonalStatusMap>({});
+  const serverStatusByDateRef = useRef<PersonalStatusMap>({});
+  const pendingSaveByDateRef = useRef<Partial<PersonalStatusMap>>({});
+  const savingByDateRef = useRef<Record<string, boolean>>({});
+  const inFlightSaveByDateRef = useRef<Partial<PersonalStatusMap>>({});
+  const saveStateTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>(
+    {}
+  );
+
+  const clearSaveStateTimer = useCallback((iso: string) => {
+    const timer = saveStateTimersRef.current[iso];
+    if (timer) {
+      clearTimeout(timer);
+      delete saveStateTimersRef.current[iso];
+    }
+  }, []);
+
+  const setSaveStateForDate = useCallback(
+    (iso: string, state: SaveStatus | null) => {
+      if (!mountedRef.current) return;
+
+      clearSaveStateTimer(iso);
+      setSaveStateByDate((prev) => {
+        const next = { ...prev };
+        if (state) {
+          next[iso] = state;
+        } else {
+          delete next[iso];
+        }
+        return next;
+      });
+
+      if (state === 'saved') {
+        saveStateTimersRef.current[iso] = setTimeout(() => {
+          if (!mountedRef.current) return;
+          setSaveStateByDate((prev) => {
+            if (prev[iso] !== 'saved') return prev;
+            const next = { ...prev };
+            delete next[iso];
+            return next;
+          });
+          delete saveStateTimersRef.current[iso];
+        }, SAVED_STATE_VISIBLE_MS);
+      }
+    },
+    [clearSaveStateTimer]
+  );
+
+  const replaceStatusMap = useCallback((next: PersonalStatusMap) => {
+    statusByDateRef.current = next;
+    if (mountedRef.current) {
+      setStatusByDate(next);
+    }
+  }, []);
+
+  const updateStatusForDate = useCallback((iso: string, status: DayStatus) => {
+    const next = { ...statusByDateRef.current, [iso]: status };
+    replaceStatusMap(next);
+  }, [replaceStatusMap]);
+
+  const processSaveForDate = useCallback(
+    async (iso: string) => {
+      if (savingByDateRef.current[iso]) return;
+
+      const currentUserId = userIdRef.current;
+      if (!currentUserId) return;
+
+      const desired = pendingSaveByDateRef.current[iso];
+      if (!desired) return;
+
+      delete pendingSaveByDateRef.current[iso];
+      savingByDateRef.current[iso] = true;
+      inFlightSaveByDateRef.current[iso] = desired;
+      setSaveStateForDate(iso, 'saving');
+
+      try {
+        await saveStatusWithRetry(currentUserId, iso, desired);
+        if (!mountedRef.current) return;
+
+        serverStatusByDateRef.current = {
+          ...serverStatusByDateRef.current,
+          [iso]: desired,
+        };
+        delete inFlightSaveByDateRef.current[iso];
+        delete savingByDateRef.current[iso];
+
+        if (pendingSaveByDateRef.current[iso]) {
+          void processSaveForDate(iso);
+          return;
+        }
+
+        setSaveStateForDate(iso, 'saved');
+        toast.success(statusMessage(desired));
+      } catch (err: any) {
+        if (!mountedRef.current) return;
+
+        delete inFlightSaveByDateRef.current[iso];
+        delete savingByDateRef.current[iso];
+
+        if (pendingSaveByDateRef.current[iso]) {
+          void processSaveForDate(iso);
+          return;
+        }
+
+        const rollback =
+          serverStatusByDateRef.current[iso] ?? DEFAULT_DAY_STATUS;
+        updateStatusForDate(iso, rollback);
+        setSaveStateForDate(iso, 'error');
+        toast.show(err?.message || 'Failed to save status. Your change was reverted.', {
+          variant: 'info',
+        });
+      }
+    },
+    [setSaveStateForDate, toast, updateStatusForDate]
+  );
+
+  const flushPendingSaves = useCallback(() => {
+    Object.keys(pendingSaveByDateRef.current).forEach((iso) => {
+      void processSaveForDate(iso);
+    });
+  }, [processSaveForDate]);
+
+  useEffect(() => {
+    return () => {
+      mountedRef.current = false;
+      Object.values(saveStateTimersRef.current).forEach(clearTimeout);
+      saveStateTimersRef.current = {};
+    };
+  }, []);
 
   const loadCalendar = useCallback(async () => {
     setLoading(true);
@@ -109,6 +292,52 @@ export default function MyCalendar() {
   useEffect(() => {
     void loadCalendar();
   }, [loadCalendar]);
+    let mounted = true;
+    (async () => {
+      try {
+        const user = await authService.getCurrentUser();
+        if (!user || !mounted) return;
+        const entries = await calendarService.getEntries(user.id);
+        if (!mounted) return;
+        const map: PersonalStatusMap = {};
+        for (const e of entries) {
+          map[e.date] = calendarStatusToDayStatus(e.status);
+        }
+        serverStatusByDateRef.current = map;
+        const optimisticMap = { ...map };
+        for (const [date, status] of Object.entries(
+          inFlightSaveByDateRef.current
+        )) {
+          if (status) optimisticMap[date] = status;
+        }
+        for (const [date, status] of Object.entries(
+          pendingSaveByDateRef.current
+        )) {
+          if (status) optimisticMap[date] = status;
+        }
+        replaceStatusMap(optimisticMap);
+        userIdRef.current = user.id;
+        setUserId(user.id);
+      } catch (err: any) {
+        if (mounted) {
+          toast.show(err?.message || 'Failed to load your calendar', {
+            variant: 'info',
+          });
+        }
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+    // toast is stable across renders via context; intentionally not in deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (userId) {
+      flushPendingSaves();
+    }
+  }, [flushPendingSaves, userId]);
 
   const visibleDays = useMemo(() => {
     const gridStart = startOfWeek(startOfMonth(viewMonth), { weekStartsOn: 0 });
@@ -120,40 +349,58 @@ export default function MyCalendar() {
   const goNext = () => setViewMonth((d) => addMonths(d, 1));
   const goToday = () => setViewMonth(startOfMonth(today));
 
-  const toggleDay = async (iso: string) => {
-    const current = statusByDate[iso] ?? DEFAULT_DAY_STATUS;
+  const toggleDay = (iso: string) => {
+    const current = statusByDateRef.current[iso] ?? DEFAULT_DAY_STATUS;
     const next: DayStatus = current === 'in_town' ? 'away' : 'in_town';
 
     // Optimistically flip the cell so the UI feels instant.
-    setStatusByDate((prev) => ({ ...prev, [iso]: next }));
-
-    if (!userId) {
-      // Entries haven't loaded yet (or auth not resolved). Don't persist;
-      // the optimistic flip will be reconciled on next mount.
-      toast.success(
-        next === 'in_town' ? 'Status updated — in town' : 'Status updated — away'
-      );
-      return;
-    }
-
-    try {
-      await calendarService.setEntry(
-        userId,
-        iso,
-        dayStatusToCalendarStatus(next)
-      );
-      toast.success(
-        next === 'in_town' ? 'Status updated — in town' : 'Status updated — away'
-      );
-    } catch (err: any) {
-      // Revert local state if the save fails so the UI matches the server.
-      setStatusByDate((prev) => ({ ...prev, [iso]: current }));
-      toast.show(err?.message || 'Failed to save status', { variant: 'info' });
-    }
+    updateStatusForDate(iso, next);
+    pendingSaveByDateRef.current = {
+      ...pendingSaveByDateRef.current,
+      [iso]: next,
+    };
+    setSaveStateForDate(iso, 'saving');
+    void processSaveForDate(iso);
   };
 
   const statusFor = (iso: string): DayStatus =>
     statusByDate[iso] ?? DEFAULT_DAY_STATUS;
+
+  const saveSummary = useMemo(() => {
+    const states = Object.values(saveStateByDate);
+    const savingCount = states.filter((state) => state === 'saving').length;
+
+    if (savingCount > 0) {
+      return {
+        text:
+          savingCount === 1
+            ? 'Saving change...'
+            : `Saving ${savingCount} changes...`,
+        status: 'saving' as SaveStatus,
+      };
+    }
+
+    if (states.includes('error')) {
+      return {
+        text: 'Some changes were not saved',
+        status: 'error' as SaveStatus,
+      };
+    }
+
+  const statusFor = (iso: string): DayStatus =>
+    statusByDate[iso] ?? DEFAULT_DAY_STATUS;
+  const weekdayLabels = layout.compact
+    ? WEEKDAYS.map((day) => day.slice(0, 1))
+    : WEEKDAYS.map((day) => day.toUpperCase());
+    if (states.includes('saved')) {
+      return {
+        text: 'All changes saved',
+        status: 'saved' as SaveStatus,
+      };
+    }
+
+    return null;
+  }, [saveStateByDate]);
 
   const completeAvailabilityOnboarding = async () => {
     if (!userId) {
@@ -247,7 +494,16 @@ export default function MyCalendar() {
   return (
     <ScrollView
       style={styles.outer}
-      contentContainerStyle={styles.outerContent}
+      contentContainerStyle={[
+        styles.outerContent,
+        {
+          paddingTop: layout.compact ? spacing[4] : spacing[7],
+          paddingBottom: spacing[8] + insets.bottom,
+          paddingLeft: layout.paddingLeft,
+          paddingRight: layout.paddingRight,
+        },
+      ]}
+      contentInsetAdjustmentBehavior="automatic"
     >
       <View style={styles.inner}>
         {showOnboardingGuide && (
@@ -317,9 +573,11 @@ export default function MyCalendar() {
         )}
 
         <View style={styles.titleBlock}>
-          <Text style={styles.pageTitle}>My Calendar</Text>
+          <Text style={[styles.pageTitle, layout.compact && styles.pageTitleCompact]}>
+            My Calendar
+          </Text>
           <Text style={styles.pageSubtitle}>
-            Click any day to toggle your status
+            Tap any day to toggle your status
           </Text>
         </View>
 
@@ -327,6 +585,7 @@ export default function MyCalendar() {
           <View style={styles.bulkRow}>
             <Pressable
               onPress={() => showComingSoon('Mark week as in town')}
+              accessibilityRole="button"
               style={({ pressed, hovered }: any) => [
                 styles.bulkButton,
                 styles.bulkInTown,
@@ -339,6 +598,7 @@ export default function MyCalendar() {
             </Pressable>
             <Pressable
               onPress={() => showComingSoon('Mark week as away')}
+              accessibilityRole="button"
               style={({ pressed, hovered }: any) => [
                 styles.bulkButton,
                 styles.bulkAway,
@@ -350,8 +610,29 @@ export default function MyCalendar() {
               </Text>
             </Pressable>
           </View>
+          {saveSummary && (
+            <View
+              style={[
+                styles.saveSummary,
+                saveSummary.status === 'error' && styles.saveSummaryError,
+                saveSummary.status === 'saved' && styles.saveSummarySaved,
+              ]}
+            >
+              <Text
+                style={[
+                  styles.saveSummaryText,
+                  saveSummary.status === 'error' && styles.saveSummaryTextError,
+                  saveSummary.status === 'saved' && styles.saveSummaryTextSaved,
+                ]}
+              >
+                {saveSummary.text}
+              </Text>
+            </View>
+          )}
           <Pressable
             onPress={goToday}
+            accessibilityRole="button"
+            accessibilityLabel="Go to current month"
             style={({ pressed, hovered }: any) => [
               styles.todayPill,
               (pressed || hovered) && styles.todayPillHover,
@@ -373,7 +654,12 @@ export default function MyCalendar() {
           >
             <Text style={styles.monthArrowGlyph}>‹</Text>
           </Pressable>
-          <Text style={styles.monthLabel}>{format(viewMonth, 'MMMM yyyy')}</Text>
+          <Text
+            style={[styles.monthLabel, layout.compact && styles.monthLabelCompact]}
+            numberOfLines={1}
+          >
+            {format(viewMonth, 'MMMM yyyy')}
+          </Text>
           <Pressable
             onPress={goNext}
             accessibilityRole="button"
@@ -387,6 +673,16 @@ export default function MyCalendar() {
           </Pressable>
         </View>
 
+        <View style={[styles.calendarFrame, { padding: layout.framePadding }]}>
+          <ScrollView
+            horizontal
+            bounces={false}
+            scrollEnabled={layout.isScrollable}
+            showsHorizontalScrollIndicator={layout.isScrollable}
+          >
+            <View style={{ width: layout.gridWidth }}>
+              <View style={[styles.weekdayRow, { gap: layout.gap }]}>
+                {weekdayLabels.map((day, index) => (
         <View style={styles.calendarFrame}>
           <View style={styles.weekdayRow}>
             {WEEKDAYS.map((day) => (
@@ -402,51 +698,147 @@ export default function MyCalendar() {
               const inMonth = isSameMonth(date, viewMonth);
               const todayCell = isSameDay(date, today);
               const status = statusFor(iso);
+              const saveState = saveStateByDate[iso];
               const bg =
                 status === 'in_town' ? colors.heatmap.high : colors.heatmap.low;
               const dayNumber = format(date, 'd');
               const statusLabel = status === 'in_town' ? 'In Town' : 'Away';
+              const saveLabel =
+                saveState === 'saving'
+                  ? 'Saving...'
+                  : saveState === 'saved'
+                    ? 'Saved'
+                    : saveState === 'error'
+                      ? 'Not saved'
+                      : null;
 
               return (
                 <Pressable
                   key={iso}
                   onPress={() => toggleDay(iso)}
                   accessibilityRole="button"
-                  accessibilityLabel={`${format(date, 'EEEE, MMM d')} — ${statusLabel}`}
+                  accessibilityLabel={`${format(date, 'EEEE, MMM d')} — ${statusLabel}${
+                    saveLabel ? ` — ${saveLabel}` : ''
+                  }`}
                   accessibilityHint="Tap to toggle in town or away"
                   style={({ pressed, hovered }: any) => [
                     styles.cell,
                     { backgroundColor: bg },
                     !inMonth && styles.cellOutsideMonth,
                     todayCell && styles.cellToday,
+                    saveState === 'saving' && styles.cellSaving,
+                    saveState === 'error' && styles.cellSaveError,
                     hovered && styles.cellHover,
                     pressed && styles.cellPressed,
                   ]}
                 >
                   <View style={styles.cellInnerStroke} pointerEvents="none" />
+                  {saveLabel && (
+                    <View
+                      pointerEvents="none"
+                      style={[
+                        styles.saveBadge,
+                        saveState === 'saved' && styles.saveBadgeSaved,
+                        saveState === 'error' && styles.saveBadgeError,
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.saveBadgeText,
+                          saveState === 'error' && styles.saveBadgeTextError,
+                        ]}
+                        numberOfLines={1}
+                      >
+                        {saveLabel}
+                      </Text>
+                    </View>
+                  )}
                   <Text
+                    key={`${day}-${index}`}
                     style={[
-                      styles.dayNumber,
-                      !inMonth && styles.dayNumberOutsideMonth,
+                      styles.weekdayLabel,
+                      layout.compact && styles.weekdayLabelCompact,
+                      { width: layout.cellWidth },
                     ]}
                   >
-                    {dayNumber}
+                    {day}
                   </Text>
-                  <Text style={styles.statusLabel} numberOfLines={1}>
-                    {statusLabel}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
+                ))}
+              </View>
+
+              <View style={[styles.grid, { gap: layout.gap }]}>
+                {visibleDays.map((date) => {
+                  const iso = ISO(date);
+                  const inMonth = isSameMonth(date, viewMonth);
+                  const todayCell = isSameDay(date, today);
+                  const status = statusFor(iso);
+                  const bg =
+                    status === 'in_town' ? colors.heatmap.high : colors.heatmap.low;
+                  const dayNumber = format(date, 'd');
+                  const fullStatusLabel = status === 'in_town' ? 'In Town' : 'Away';
+                  const statusLabel =
+                    layout.compact && status === 'in_town' ? 'In' : fullStatusLabel;
+
+                  return (
+                    <Pressable
+                      key={iso}
+                      onPress={() => toggleDay(iso)}
+                      accessibilityRole="button"
+                      accessibilityLabel={`${format(date, 'EEEE, MMM d')} - ${fullStatusLabel}`}
+                      accessibilityHint="Tap to toggle in town or away"
+                      hitSlop={layout.compact ? 0 : 4}
+                      style={({ pressed, hovered }: any) => [
+                        styles.cell,
+                        {
+                          backgroundColor: bg,
+                          borderRadius: layout.compact ? radius.sm : radius.md,
+                          height: layout.cellHeight,
+                          padding: layout.compact ? spacing[1] : spacing[2],
+                          width: layout.cellWidth,
+                        },
+                        !inMonth && styles.cellOutsideMonth,
+                        todayCell && styles.cellToday,
+                        hovered && styles.cellHover,
+                        pressed && styles.cellPressed,
+                      ]}
+                    >
+                      <View
+                        style={[
+                          styles.cellInnerStroke,
+                          { borderRadius: (layout.compact ? radius.sm : radius.md) - 2 },
+                        ]}
+                        pointerEvents="none"
+                      />
+                      <Text
+                        style={[
+                          styles.dayNumber,
+                          layout.compact && styles.dayNumberCompact,
+                          !inMonth && styles.dayNumberOutsideMonth,
+                        ]}
+                      >
+                        {dayNumber}
+                      </Text>
+                      <Text
+                        style={[
+                          styles.statusLabel,
+                          layout.compact && styles.statusLabelCompact,
+                          !inMonth && styles.statusLabelOutsideMonth,
+                        ]}
+                        numberOfLines={1}
+                      >
+                        {statusLabel}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </View>
+          </ScrollView>
         </View>
       </View>
     </ScrollView>
   );
 }
-
-const CELL_HEIGHT = 100;
-const CELL_GAP = spacing[2];
 
 const styles = StyleSheet.create({
   outer: {
@@ -461,9 +853,6 @@ const styles = StyleSheet.create({
     padding: spacing[4],
   },
   outerContent: {
-    paddingTop: spacing[7],
-    paddingBottom: spacing[8],
-    paddingHorizontal: spacing[4],
     alignItems: 'center',
   },
   inner: {
@@ -579,6 +968,10 @@ const styles = StyleSheet.create({
     color: colors.text.primary,
     marginBottom: 4,
   },
+  pageTitleCompact: {
+    fontSize: typography.display.medium.fontSize,
+    lineHeight: typography.display.medium.lineHeight,
+  },
   pageSubtitle: {
     fontFamily: fontFamilies.inter.regular,
     fontSize: typography.body.default.fontSize,
@@ -599,7 +992,7 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
   },
   bulkButton: {
-    height: 36,
+    minHeight: 44,
     paddingHorizontal: spacing[4],
     paddingVertical: spacing[2],
     borderRadius: radius.full,
@@ -633,7 +1026,37 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     letterSpacing: typography.label.letterSpacing,
   },
+  saveSummary: {
+    paddingHorizontal: spacing[3],
+    paddingVertical: spacing[2],
+    borderRadius: radius.full,
+    backgroundColor: 'rgba(233, 78, 119, 0.10)',
+    borderWidth: 1,
+    borderColor: 'rgba(233, 78, 119, 0.22)',
+  },
+  saveSummarySaved: {
+    backgroundColor: 'rgba(134, 167, 137, 0.14)',
+    borderColor: 'rgba(134, 167, 137, 0.35)',
+  },
+  saveSummaryError: {
+    backgroundColor: 'rgba(196, 90, 77, 0.14)',
+    borderColor: 'rgba(196, 90, 77, 0.35)',
+  },
+  saveSummaryText: {
+    fontFamily: fontFamilies.inter.medium,
+    fontSize: typography.label.fontSize,
+    fontWeight: '600',
+    letterSpacing: typography.label.letterSpacing,
+    color: colors.brand.primary,
+  },
+  saveSummaryTextSaved: {
+    color: '#4D6A50',
+  },
+  saveSummaryTextError: {
+    color: '#8A3B32',
+  },
   todayPill: {
+    minHeight: 44,
     paddingHorizontal: spacing[3],
     paddingVertical: spacing[2],
     borderRadius: radius.full,
@@ -659,8 +1082,8 @@ const styles = StyleSheet.create({
     marginBottom: spacing[5],
   },
   monthArrow: {
-    width: 48,
-    height: 48,
+    width: 44,
+    height: 44,
     borderRadius: radius.full,
     alignItems: 'center',
     justifyContent: 'center',
@@ -676,43 +1099,44 @@ const styles = StyleSheet.create({
   },
   monthLabel: {
     ...typography.calendar.month,
+    flexShrink: 1,
     color: colors.text.primary,
-    minWidth: 280,
+    minWidth: 0,
     textAlign: 'center',
+  },
+  monthLabelCompact: {
+    fontSize: typography.display.small.fontSize,
+    lineHeight: typography.display.small.lineHeight,
   },
   calendarFrame: {
     backgroundColor: colors.background.card,
     borderWidth: 1,
     borderColor: colors.border.subtle,
     borderRadius: radius.lg,
-    padding: spacing[3],
     ...shadows.sm,
   },
   weekdayRow: {
     flexDirection: 'row',
     marginBottom: spacing[3],
-    gap: CELL_GAP,
   },
   weekdayLabel: {
-    flex: 1,
     ...typography.calendar.weekday,
     color: colors.text.tertiary,
     textAlign: 'center',
   },
+  weekdayLabelCompact: {
+    fontSize: typography.caption.fontSize,
+    letterSpacing: 0.6,
+    lineHeight: typography.caption.lineHeight,
+  },
   grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: CELL_GAP,
   },
   cell: {
-    flexGrow: 0,
-    flexShrink: 1,
-    flexBasis: `${(100 - 6) / 7}%`,
-    height: CELL_HEIGHT,
     borderRadius: radius.md,
     borderWidth: 1,
     borderColor: colors.border.subtle,
-    padding: spacing[2],
     justifyContent: 'space-between',
     position: 'relative',
     overflow: 'hidden',
@@ -736,6 +1160,12 @@ const styles = StyleSheet.create({
     borderColor: colors.brand.primary,
     ...shadows.md,
   },
+  cellSaving: {
+    borderColor: colors.brand.primary,
+  },
+  cellSaveError: {
+    borderColor: '#8A3B32',
+  },
   cellHover: {
     ...shadows.md,
   },
@@ -746,6 +1176,10 @@ const styles = StyleSheet.create({
     ...typography.calendar.dayNumber,
     color: colors.text.primary,
   },
+  dayNumberCompact: {
+    fontSize: 20,
+    lineHeight: 24,
+  },
   dayNumberOutsideMonth: {
     color: colors.text.secondary,
   },
@@ -753,5 +1187,37 @@ const styles = StyleSheet.create({
     ...typography.calendar.meta,
     color: 'rgba(255, 255, 255, 0.9)',
     alignSelf: 'flex-end',
+  },
+  statusLabelCompact: {
+    fontSize: 9,
+    letterSpacing: 0.3,
+    lineHeight: 12,
+  },
+  statusLabelOutsideMonth: {
+    color: colors.text.secondary,
+  saveBadge: {
+    position: 'absolute',
+    top: spacing[2],
+    right: spacing[2],
+    borderRadius: radius.full,
+    paddingHorizontal: spacing[2],
+    paddingVertical: 2,
+    backgroundColor: 'rgba(255, 255, 255, 0.82)',
+  },
+  saveBadgeSaved: {
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+  },
+  saveBadgeError: {
+    backgroundColor: 'rgba(255, 246, 244, 0.95)',
+  },
+  saveBadgeText: {
+    fontFamily: fontFamilies.inter.medium,
+    fontSize: 10,
+    fontWeight: '700',
+    color: colors.brand.primary,
+    letterSpacing: 0.2,
+  },
+  saveBadgeTextError: {
+    color: '#8A3B32',
   },
 });

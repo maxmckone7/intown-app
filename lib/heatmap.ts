@@ -1,10 +1,38 @@
 import { colors } from '../theme';
+import { CalendarStatus, VisibilityLevel } from './types';
 
 export type HeatmapDayData = {
   date: string; // YYYY-MM-DD
   friendsInTown: number;
   totalFriends: number;
 };
+
+/**
+ * Whether a friend should appear in the viewer's calendar at all. Friends who
+ * set you to 'hidden' (or who are appearing away) are dropped from both the
+ * in-town count and the denominator.
+ */
+export function isFriendVisible(level: VisibilityLevel | undefined): boolean {
+  return (level ?? 'full') !== 'hidden';
+}
+
+/**
+ * Whether a (visible) friend counts as "in town" on a day, honoring their
+ * shared visibility level:
+ *   full    - optimistic: in town unless they explicitly marked out_of_town
+ *   limited - only counts when they explicitly marked in_town (away days are
+ *             private, so we must NOT assume they're around)
+ *   hidden  - never
+ */
+export function isFriendInTown(
+  level: VisibilityLevel | undefined,
+  status: CalendarStatus | undefined
+): boolean {
+  const resolved = level ?? 'full';
+  if (resolved === 'hidden') return false;
+  if (resolved === 'limited') return status === 'in_town';
+  return status !== 'out_of_town';
+}
 
 /**
  * Returns the heatmap color token for a given day based on the

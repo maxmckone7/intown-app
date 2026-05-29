@@ -10,7 +10,9 @@ import {
   StyleSheet,
   Text,
   View,
+  useWindowDimensions,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { format } from 'date-fns';
 import {
   colors,
@@ -20,7 +22,8 @@ import {
   spacing,
   typography,
 } from '../theme';
-import { CalendarEntry, FriendWithStatus } from '../lib/types';
+import { CalendarEntry, FriendWithStatus, VisibilityLevel } from '../lib/types';
+import { isFriendInTown, isFriendVisible } from '../lib/heatmap';
 import { useReducedMotion } from '../lib/use-reduced-motion';
 
 type Props = {
@@ -29,9 +32,13 @@ type Props = {
   date: string | null;
   /** Real friends list; availability is read from Supabase calendar entries. */
   friends: FriendWithStatus[];
+  groupLabel?: string;
   calendarEntries?: CalendarEntry[];
+  /** Each friend's visibility toward the viewer (defaults to 'full' when absent). */
+  visibility?: Map<string, VisibilityLevel>;
   onClose: () => void;
-  onMessage?: (friendId: string) => void;
+  onMessage?: (friend: FriendWithStatus, date: string) => void;
+  onProposeHangout?: (friends: FriendWithStatus[], date: string) => void;
 };
 
 function formatHeaderDate(isoDate: string): string {
@@ -42,13 +49,18 @@ export default function DayDetailModal({
   visible,
   date,
   friends,
+  groupLabel,
   calendarEntries = [],
+  visibility,
   onClose,
   onMessage,
+  onProposeHangout,
 }: Props) {
   const opacity = useRef(new Animated.Value(0)).current;
   const translateY = useRef(new Animated.Value(30)).current;
   const reducedMotion = useReducedMotion();
+  const insets = useSafeAreaInsets();
+  const { height } = useWindowDimensions();
 
   useEffect(() => {
     if (visible) {
@@ -90,6 +102,12 @@ export default function DayDetailModal({
     return () => document.removeEventListener('keydown', onKey);
   }, [visible, onClose]);
 
+  // Friends who hid their calendar from the viewer never appear here.
+  const visibleFriends = useMemo(
+    () => friends.filter((friend) => isFriendVisible(visibility?.get(friend.id))),
+    [friends, visibility]
+  );
+
   const inTownFriends = useMemo(() => {
     if (!date) return [];
     const statuses = new Map(
@@ -98,20 +116,39 @@ export default function DayDetailModal({
         .map((entry) => [entry.user_id, entry.status])
     );
 
+    return visibleFriends
+      .filter((friend) =>
+        isFriendInTown(visibility?.get(friend.id), statuses.get(friend.id))
+      )
+      .map((friend) => ({ friend, status: 'In town' }));
+  }, [calendarEntries, date, visibleFriends, visibility]);
     return friends
       .filter((friend) => statuses.get(friend.id) !== 'out_of_town')
-      .map((friend) => ({ friend, status: 'In town' }));
+      .map((friend) => ({ friend, status: 'In town' }))
+      .sort((a, b) => {
+        const aName = a.friend.name || a.friend.email;
+        const bName = b.friend.name || b.friend.email;
+        return aName.localeCompare(bName);
+      });
   }, [calendarEntries, date, friends]);
 
   if (!date) return null;
 
   const headerDate = formatHeaderDate(date);
-  const totalFriends = friends.length;
+  const totalFriends = visibleFriends.length;
   const inTownCount = inTownFriends.length;
+  const inTownFriendList = inTownFriends.map(({ friend }) => friend);
+  const scopedLabel =
+    groupLabel && groupLabel !== 'All friends' ? ` · ${groupLabel}` : '';
   const subtitle =
     totalFriends === 0
       ? 'No friends yet'
       : `${inTownCount} of ${totalFriends} friend${totalFriends === 1 ? '' : 's'} in town`;
+  const modalMaxHeight = Math.max(
+    240,
+    height - insets.top - insets.bottom - spacing[4] * 2
+  );
+      : `${inTownCount} of ${totalFriends} friend${totalFriends === 1 ? '' : 's'} in town${scopedLabel}`;
 
   return (
     <Modal
@@ -122,7 +159,15 @@ export default function DayDetailModal({
       statusBarTranslucent
     >
       <Pressable
-        style={styles.backdrop}
+        style={[
+          styles.backdrop,
+          {
+            paddingTop: spacing[4] + insets.top,
+            paddingBottom: spacing[4] + insets.bottom,
+            paddingLeft: spacing[4] + insets.left,
+            paddingRight: spacing[4] + insets.right,
+          },
+        ]}
         onPress={onClose}
         accessibilityLabel="Close day details"
       >
@@ -130,6 +175,7 @@ export default function DayDetailModal({
         <Animated.View
           style={[
             styles.card,
+            { maxHeight: modalMaxHeight },
             { opacity, transform: [{ translateY }] },
           ]}
           // Stop the inner press from bubbling to the backdrop
@@ -166,57 +212,76 @@ export default function DayDetailModal({
               <Text style={styles.emptyBody}>Try checking nearby weekends.</Text>
             </View>
           ) : (
-            <ScrollView
-              style={styles.list}
-              contentContainerStyle={styles.listContent}
-              showsVerticalScrollIndicator={false}
-            >
-              <View style={styles.sectionLabelRow}>
-                <Text style={styles.sectionLabel}>In Town</Text>
-                <View style={styles.sectionDivider} />
-              </View>
-              {inTownFriends.map(({ friend, status }) => {
-                const initial =
-                  friend.name?.charAt(0).toUpperCase() ||
-                  friend.email.charAt(0).toUpperCase();
-                return (
-                  <Pressable
-                    key={friend.id}
-                    style={({ hovered }: any) => [
-                      styles.friendRow,
-                      hovered && styles.friendRowHover,
-                    ]}
-                  >
-                    <View style={styles.avatar}>
-                      {friend.avatar_url ? (
-                        <Image
-                          source={{ uri: friend.avatar_url }}
-                          style={styles.avatarImage}
-                        />
-                      ) : (
-                        <Text style={styles.avatarInitial}>{initial}</Text>
-                      )}
-                    </View>
-                    <View style={styles.friendBody}>
-                      <Text style={styles.friendName}>
-                        {friend.name || friend.email}
-                      </Text>
-                      <Text style={styles.friendStatus}>{status}</Text>
-                    </View>
+            <>
+              <ScrollView
+                style={styles.list}
+                contentContainerStyle={styles.listContent}
+                showsVerticalScrollIndicator={false}
+              >
+                <View style={styles.sectionLabelRow}>
+                  <Text style={styles.sectionLabel}>In Town</Text>
+                  <View style={styles.sectionDivider} />
+                </View>
+                {inTownFriends.map(({ friend, status }) => {
+                  const initial =
+                    friend.name?.charAt(0).toUpperCase() ||
+                    friend.email.charAt(0).toUpperCase();
+                  const displayName = friend.name || friend.email;
+                  return (
                     <Pressable
-                      onPress={() => onMessage?.(friend.id)}
+                      key={friend.id}
                       accessibilityRole="button"
-                      style={({ pressed, hovered }: any) => [
-                        styles.messageButton,
-                        (pressed || hovered) && styles.messageButtonHover,
+                      accessibilityLabel={`${displayName}, ${status}`}
+                      style={({ hovered }: any) => [
+                        styles.friendRow,
+                        hovered && styles.friendRowHover,
                       ]}
                     >
-                      <Text style={styles.messageButtonText}>Message</Text>
+                      <View style={styles.avatar}>
+                        {friend.avatar_url ? (
+                          <Image
+                            source={{ uri: friend.avatar_url }}
+                            style={styles.avatarImage}
+                          />
+                        ) : (
+                          <Text style={styles.avatarInitial}>{initial}</Text>
+                        )}
+                      </View>
+                      <View style={styles.friendBody}>
+                        <Text style={styles.friendName}>
+                          {displayName}
+                        </Text>
+                        <Text style={styles.friendStatus}>{status}</Text>
+                      </View>
+                      <Pressable
+                        onPress={() => onMessage?.(friend, date)}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Message ${displayName}`}
+                        style={({ pressed, hovered }: any) => [
+                          styles.messageButton,
+                          (pressed || hovered) && styles.messageButtonHover,
+                        ]}
+                      >
+                        <Text style={styles.messageButtonText}>Message</Text>
+                      </Pressable>
                     </Pressable>
-                  </Pressable>
-                );
-              })}
-            </ScrollView>
+                  );
+                })}
+              </ScrollView>
+              <View style={styles.actionBar}>
+                <Pressable
+                  onPress={() => onProposeHangout?.(inTownFriendList, date)}
+                  accessibilityRole="button"
+                  accessibilityLabel="Propose a hangout"
+                  style={({ pressed, hovered }: any) => [
+                    styles.proposeButton,
+                    (pressed || hovered) && styles.proposeButtonHover,
+                  ]}
+                >
+                  <Text style={styles.proposeButtonText}>Propose hangout</Text>
+                </Pressable>
+              </View>
+            </>
           )}
         </Animated.View>
       </Pressable>
@@ -229,7 +294,6 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    padding: spacing[4],
   },
   backdropFade: {
     ...StyleSheet.absoluteFillObject,
@@ -238,7 +302,6 @@ const styles = StyleSheet.create({
   card: {
     width: '100%',
     maxWidth: 480,
-    maxHeight: 600,
     backgroundColor: colors.background.card,
     borderRadius: radius.lg,
     padding: spacing[6],
@@ -267,8 +330,8 @@ const styles = StyleSheet.create({
     color: colors.text.secondary,
   },
   closeButton: {
-    width: 32,
-    height: 32,
+    width: 44,
+    height: 44,
     borderRadius: radius.full,
     alignItems: 'center',
     justifyContent: 'center',
@@ -341,6 +404,7 @@ const styles = StyleSheet.create({
   },
   friendBody: {
     flex: 1,
+    minWidth: 0,
   },
   friendName: {
     fontFamily: fontFamilies.inter.medium,
@@ -355,6 +419,7 @@ const styles = StyleSheet.create({
     color: colors.text.secondary,
   },
   messageButton: {
+    minHeight: 44,
     paddingHorizontal: spacing[3],
     paddingVertical: spacing[2],
     borderRadius: radius.sm,
@@ -368,6 +433,30 @@ const styles = StyleSheet.create({
     fontSize: typography.body.small.fontSize,
     fontWeight: '600',
     color: colors.brand.primary,
+  },
+  actionBar: {
+    borderTopWidth: 1,
+    borderTopColor: colors.border.subtle,
+    marginTop: spacing[4],
+    paddingTop: spacing[4],
+  },
+  proposeButton: {
+    minHeight: 48,
+    borderRadius: radius.md,
+    backgroundColor: colors.brand.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: spacing[4],
+    paddingVertical: spacing[3],
+  },
+  proposeButtonHover: {
+    backgroundColor: colors.brand.primaryHover,
+  },
+  proposeButtonText: {
+    fontFamily: fontFamilies.inter.medium,
+    fontSize: typography.body.default.fontSize,
+    fontWeight: '700',
+    color: '#FFFFFF',
   },
   emptyState: {
     alignItems: 'center',
