@@ -101,7 +101,14 @@ export default function FriendsCalendar({
       : 'Availability not updated yet';
 
   const handleDayPress = (iso: string) => {
-    onDayPress?.(iso, selectedGroupId);
+    onDayPress?.(iso, activeGroupId);
+  };
+
+  const handleGroupSelect = (groupId: string) => {
+    if (selectedGroupId === undefined) {
+      setInternalSelectedGroupId(groupId);
+    }
+    onSelectGroup?.(groupId);
   };
 
   const handleGroupSelect = (groupId: string) => {

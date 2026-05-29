@@ -136,6 +136,16 @@ export default function FriendsCalendarScreen() {
     }
   }, [routeDate, routeGroupId]);
 
+  useEffect(() => {
+    if (routeDate && isIsoDate(routeDate)) {
+      setSelectedDay({ date: routeDate, groupId: routeGroupId || 'all' });
+    }
+
+    if (routeGroupId) {
+      setSelectedGroupId(routeGroupId);
+    }
+  }, [routeDate, routeGroupId]);
+
   const loadUserAndFriends = async () => {
     try {
       const user = await authService.getCurrentUser();
