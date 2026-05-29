@@ -1,6 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import {
-  Animated,
   View,
   Text,
   TextInput,
@@ -10,12 +9,13 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
-  Easing,
+  ScrollView,
+  useWindowDimensions,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { authService } from '../../services/auth';
 import BrandLogo from '../../components/BrandLogo';
-import { colors } from '../../theme';
+import { colors, fontFamilies, radius, shadows, spacing, typography } from '../../theme';
 
 // Web-compatible alert function
 const showAlert = (title: string, message: string) => {
@@ -30,80 +30,9 @@ export default function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const floatAnim = useRef(new Animated.Value(0)).current;
-  const glowAnim = useRef(new Animated.Value(0)).current;
   const router = useRouter();
-
-  useEffect(() => {
-    const animation = Animated.loop(
-      Animated.parallel([
-        Animated.sequence([
-          Animated.timing(floatAnim, {
-            toValue: 1,
-            duration: 3400,
-            easing: Easing.inOut(Easing.sin),
-            useNativeDriver: true,
-          }),
-          Animated.timing(floatAnim, {
-            toValue: 0,
-            duration: 3400,
-            easing: Easing.inOut(Easing.sin),
-            useNativeDriver: true,
-          }),
-        ]),
-        Animated.sequence([
-          Animated.timing(glowAnim, {
-            toValue: 1,
-            duration: 2600,
-            easing: Easing.inOut(Easing.ease),
-            useNativeDriver: true,
-          }),
-          Animated.timing(glowAnim, {
-            toValue: 0,
-            duration: 2600,
-            easing: Easing.inOut(Easing.ease),
-            useNativeDriver: true,
-          }),
-        ]),
-      ])
-    );
-
-    animation.start();
-
-    return () => animation.stop();
-  }, [floatAnim, glowAnim]);
-
-  const floatingStyle = {
-    transform: [
-      {
-        translateY: floatAnim.interpolate({
-          inputRange: [0, 1],
-          outputRange: [-12, 12],
-        }),
-      },
-      {
-        rotate: floatAnim.interpolate({
-          inputRange: [0, 1],
-          outputRange: ['-6deg', '6deg'],
-        }),
-      },
-    ],
-  };
-
-  const glowStyle = {
-    opacity: glowAnim.interpolate({
-      inputRange: [0, 1],
-      outputRange: [0.35, 0.75],
-    }),
-    transform: [
-      {
-        scale: glowAnim.interpolate({
-          inputRange: [0, 1],
-          outputRange: [0.96, 1.08],
-        }),
-      },
-    ],
-  };
+  const { width } = useWindowDimensions();
+  const isDesktop = Platform.OS === 'web' && width >= 900;
 
   const handleLogin = async () => {
     if (!email || !password) {
@@ -168,32 +97,109 @@ export default function LoginScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       <View style={styles.backgroundScene}>
-        <View style={styles.sunburstOne} />
-        <View style={styles.sunburstTwo} />
-        <Animated.View style={[styles.floatingOrb, styles.orbPink, floatingStyle]} />
-        <Animated.View style={[styles.floatingOrb, styles.orbBlue, glowStyle]} />
-        <Animated.View style={[styles.floatingOrb, styles.orbGold, floatingStyle, glowStyle]} />
-        <View style={styles.rainbowRibbon}>
-          {['#ff3d7f', '#ff8a00', '#ffd400', '#32d74b', '#00c2ff', '#7a5cff'].map((color) => (
-            <View key={color} style={[styles.ribbonStripe, { backgroundColor: color }]} />
-          ))}
-        </View>
+        <View style={styles.glowTop} />
+        <View style={styles.glowBottom} />
+        <View style={styles.gridWash} />
       </View>
 
-      <View style={styles.content}>
-        <Animated.View style={[styles.heroBadge, glowStyle]}>
-          <Text style={styles.heroBadgeText}>Know who's around.</Text>
-        </Animated.View>
+      <ScrollView
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={[
+          styles.scrollContent,
+          isDesktop && styles.scrollContentDesktop,
+        ]}
+      >
+        <View style={[styles.shell, isDesktop && styles.shellDesktop]}>
+          <View style={[styles.heroPanel, isDesktop && styles.heroPanelDesktop]}>
+            <BrandLogo
+              style={styles.heroLogo}
+              textStyle={styles.heroLogoText}
+              underlineStyle={styles.heroLogoUnderline}
+            />
+            <Text style={styles.eyebrow}>Social calendar for real life</Text>
+            <Text style={[styles.heroTitle, !isDesktop && styles.heroTitleCompact]}>
+              Know who's in town before plans happen.
+            </Text>
+            <Text style={styles.heroCopy}>
+              InTown helps close friends share when they're around, spot overlapping
+              free days, and turn "we should hang out" into a plan.
+            </Text>
 
-        <View style={styles.formCard}>
-          <BrandLogo style={styles.logo} />
-          <Text style={styles.title}>Welcome back</Text>
-          <Text style={styles.subtitle}>Sign in and find the brightest plans nearby.</Text>
+            <View style={styles.previewCard}>
+              <View style={styles.previewHeader}>
+                <View>
+                  <Text style={styles.previewLabel}>This weekend</Text>
+                  <Text style={styles.previewTitle}>4 friends nearby</Text>
+                </View>
+                <View style={styles.previewBadge}>
+                  <Text style={styles.previewBadgeText}>In town</Text>
+                </View>
+              </View>
+
+              <View style={styles.dayRow}>
+                {[
+                  { day: 'Fri', count: '2' },
+                  { day: 'Sat', count: '4', active: true },
+                  { day: 'Sun', count: '3' },
+                ].map((item) => (
+                  <View
+                    key={item.day}
+                    style={[styles.dayCell, item.active && styles.dayCellActive]}
+                  >
+                    <Text
+                      style={[
+                        styles.dayText,
+                        item.active && styles.dayTextActive,
+                      ]}
+                    >
+                      {item.day}
+                    </Text>
+                    <Text
+                      style={[
+                        styles.dayCount,
+                        item.active && styles.dayTextActive,
+                      ]}
+                    >
+                      {item.count}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+
+              <View style={styles.friendStack}>
+                {['Maya', 'Leo', 'Ari'].map((name, index) => (
+                  <View key={name} style={styles.friendRow}>
+                    <View style={[styles.avatarDot, index === 1 && styles.avatarDotGold]} />
+                    <Text style={styles.friendName}>{name}</Text>
+                    <Text style={styles.friendMeta}>
+                      {index === 0 ? 'Free Saturday' : index === 1 ? 'Back in town' : 'Coffee?'}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            </View>
+
+            <View style={styles.featureRow}>
+              <View style={styles.featurePill}>
+                <Text style={styles.featurePillText}>Private by default</Text>
+              </View>
+              <View style={styles.featurePill}>
+                <Text style={styles.featurePillText}>Built for close friends</Text>
+              </View>
+            </View>
+          </View>
+
+          <View style={[styles.formCard, isDesktop && styles.formCardDesktop]}>
+            <Text style={styles.formEyebrow}>Welcome to InTown</Text>
+            <Text style={styles.title}>Sign in to see who's around.</Text>
+            <Text style={styles.subtitle}>
+              Catch up with the people already nearby or add your next free stretch.
+            </Text>
 
           <TextInput
             style={styles.input}
             placeholder="Email"
-            placeholderTextColor="#9278a8"
+              placeholderTextColor={colors.text.tertiary}
             value={email}
             onChangeText={setEmail}
             keyboardType="email-address"
@@ -204,7 +210,7 @@ export default function LoginScreen() {
           <TextInput
             style={styles.input}
             placeholder="Password"
-            placeholderTextColor="#9278a8"
+              placeholderTextColor={colors.text.tertiary}
             value={password}
             onChangeText={setPassword}
             secureTextEntry
@@ -235,13 +241,13 @@ export default function LoginScreen() {
             {loading ? (
               <ActivityIndicator color="#fff" style={styles.buttonContent} />
             ) : (
-              <Text style={styles.buttonText}>Sign In</Text>
+              <Text style={styles.buttonText}>Sign in</Text>
             )}
           </TouchableOpacity>
 
           <View style={styles.divider}>
             <View style={styles.dividerLine} />
-            <Text style={styles.dividerText}>OR</Text>
+            <Text style={styles.dividerText}>or</Text>
             <View style={styles.dividerLine} />
           </View>
 
@@ -268,11 +274,12 @@ export default function LoginScreen() {
             onPress={() => router.push('/(auth)/signup')}
           >
             <Text style={styles.linkText}>
-              Don't have an account? <Text style={styles.linkTextBold}>Sign Up</Text>
+              New here? <Text style={styles.linkTextBold}>Create an account</Text>
             </Text>
           </TouchableOpacity>
+          </View>
         </View>
-      </View>
+      </ScrollView>
     </KeyboardAvoidingView>
   );
 }
@@ -280,149 +287,280 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff4fb',
+    backgroundColor: colors.background.primary,
     overflow: 'hidden',
   },
   backgroundScene: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: '#fff4fb',
   },
-  sunburstOne: {
+  glowTop: {
     position: 'absolute',
-    top: -150,
-    left: -90,
-    width: 320,
-    height: 320,
-    borderRadius: 160,
-    backgroundColor: '#ffec8b',
-    opacity: 0.85,
-  },
-  sunburstTwo: {
-    position: 'absolute',
+    top: -220,
     right: -120,
-    bottom: -130,
-    width: 340,
-    height: 340,
-    borderRadius: 170,
-    backgroundColor: '#95f1ff',
-    opacity: 0.75,
+    width: 520,
+    height: 520,
+    borderRadius: 260,
+    backgroundColor: '#F8D8B8',
+    opacity: 0.58,
   },
-  floatingOrb: {
+  glowBottom: {
     position: 'absolute',
-    borderRadius: 999,
+    left: -180,
+    bottom: -220,
+    width: 540,
+    height: 540,
+    borderRadius: 270,
+    backgroundColor: '#F3B7C8',
+    opacity: 0.32,
   },
-  orbPink: {
+  gridWash: {
+    position: 'absolute',
     top: 96,
-    right: 34,
-    width: 96,
-    height: 96,
-    backgroundColor: '#ff6fb5',
-    opacity: 0.55,
+    right: 72,
+    width: 220,
+    height: 220,
+    borderRadius: 110,
+    backgroundColor: '#FFFFFF',
+    opacity: 0.42,
   },
-  orbBlue: {
-    bottom: 124,
-    left: 24,
-    width: 118,
-    height: 118,
-    backgroundColor: '#6d7dff',
+  scrollContent: {
+    flexGrow: 1,
+    paddingHorizontal: spacing[4],
+    paddingVertical: spacing[6],
   },
-  orbGold: {
-    top: 220,
-    left: -26,
-    width: 74,
-    height: 74,
-    backgroundColor: '#ffb000',
-  },
-  rainbowRibbon: {
-    position: 'absolute',
-    top: 54,
-    left: -36,
-    right: -36,
-    height: 22,
-    borderRadius: 22,
-    flexDirection: 'row',
-    overflow: 'hidden',
-    transform: [{ rotate: '-8deg' }],
-    opacity: 0.92,
-  },
-  ribbonStripe: {
-    flex: 1,
-  },
-  content: {
-    flex: 1,
+  scrollContentDesktop: {
     justifyContent: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 24,
+    paddingHorizontal: spacing[7],
+    paddingVertical: spacing[7],
   },
-  heroBadge: {
+  shell: {
+    width: '100%',
+    maxWidth: 1180,
     alignSelf: 'center',
-    paddingHorizontal: 18,
-    paddingVertical: 9,
-    borderRadius: 999,
-    backgroundColor: '#ffffffcc',
-    borderWidth: 1,
-    borderColor: '#ffffff',
-    marginBottom: 24,
-    shadowColor: '#ff3d7f',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.18,
-    shadowRadius: 16,
-    elevation: 4,
+    gap: spacing[5],
   },
-  heroBadgeText: {
-    color: '#7d22d8',
-    fontSize: 14,
-    fontWeight: '800',
-    letterSpacing: 0.4,
+  shellDesktop: {
+    minHeight: 660,
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    gap: spacing[7],
+  },
+  heroPanel: {
+    borderRadius: 36,
+    padding: spacing[5],
+    backgroundColor: '#FFFDF8',
+    borderWidth: 1,
+    borderColor: '#FFFFFF',
+    overflow: 'hidden',
+    ...shadows.lg,
+  },
+  heroPanelDesktop: {
+    flex: 1,
+    padding: spacing[7],
+    justifyContent: 'space-between',
+  },
+  heroLogo: {
+    marginBottom: spacing[6],
+  },
+  heroLogoText: {
+    color: colors.text.primary,
+  },
+  heroLogoUnderline: {
+    backgroundColor: colors.brand.primary,
+  },
+  eyebrow: {
+    ...typography.label,
+    color: colors.brand.primary,
+    textTransform: 'uppercase',
+    marginBottom: spacing[3],
+  },
+  heroTitle: {
+    ...typography.display.large,
+    maxWidth: 620,
+    color: colors.text.primary,
+    letterSpacing: -1.2,
+    marginBottom: spacing[4],
+  },
+  heroTitleCompact: {
+    fontSize: 38,
+    lineHeight: 44,
+  },
+  heroCopy: {
+    ...typography.body.large,
+    maxWidth: 560,
+    color: colors.text.secondary,
+    marginBottom: spacing[6],
+  },
+  previewCard: {
+    maxWidth: 520,
+    borderRadius: 28,
+    padding: spacing[5],
+    backgroundColor: colors.background.card,
+    borderWidth: 1,
+    borderColor: colors.border.subtle,
+    ...shadows.xl,
+  },
+  previewHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    gap: spacing[3],
+    marginBottom: spacing[5],
+  },
+  previewLabel: {
+    ...typography.caption,
+    color: colors.text.tertiary,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+    marginBottom: 4,
+  },
+  previewTitle: {
+    ...typography.display.small,
+    color: colors.text.primary,
+  },
+  previewBadge: {
+    borderRadius: radius.full,
+    paddingHorizontal: spacing[3],
+    paddingVertical: spacing[2],
+    backgroundColor: '#FCE8EE',
+  },
+  previewBadgeText: {
+    ...typography.label,
+    color: colors.brand.primary,
+  },
+  dayRow: {
+    flexDirection: 'row',
+    gap: spacing[3],
+    marginBottom: spacing[5],
+  },
+  dayCell: {
+    flex: 1,
+    minHeight: 92,
+    borderRadius: 22,
+    padding: spacing[3],
+    justifyContent: 'space-between',
+    backgroundColor: colors.background.primary,
+    borderWidth: 1,
+    borderColor: colors.border.subtle,
+  },
+  dayCellActive: {
+    backgroundColor: colors.brand.primary,
+    borderColor: colors.brand.primary,
+  },
+  dayText: {
+    ...typography.label,
+    color: colors.text.secondary,
+  },
+  dayTextActive: {
+    color: '#FFFFFF',
+  },
+  dayCount: {
+    fontFamily: fontFamilies.fraunces.semibold,
+    fontSize: 34,
+    fontWeight: '600',
+    lineHeight: 38,
+    color: colors.text.primary,
+  },
+  friendStack: {
+    gap: spacing[3],
+  },
+  friendRow: {
+    minHeight: 44,
+    borderRadius: radius.lg,
+    paddingHorizontal: spacing[3],
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[3],
+    backgroundColor: colors.background.primary,
+  },
+  avatarDot: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: '#86A789',
+  },
+  avatarDotGold: {
+    backgroundColor: '#E8C547',
+  },
+  friendName: {
+    ...typography.body.small,
+    flex: 1,
+    fontFamily: fontFamilies.inter.medium,
+    fontWeight: '500',
+    color: colors.text.primary,
+  },
+  friendMeta: {
+    ...typography.caption,
+    color: colors.text.secondary,
+  },
+  featureRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing[3],
+    marginTop: spacing[5],
+  },
+  featurePill: {
+    borderRadius: radius.full,
+    paddingHorizontal: spacing[4],
+    paddingVertical: spacing[2],
+    backgroundColor: '#FFFFFFB8',
+    borderWidth: 1,
+    borderColor: '#FFFFFF',
+  },
+  featurePillText: {
+    ...typography.label,
+    color: colors.text.secondary,
   },
   formCard: {
     width: '100%',
-    maxWidth: 440,
     alignSelf: 'center',
+    maxWidth: 460,
     borderRadius: 32,
-    padding: 24,
-    backgroundColor: '#ffffffee',
+    padding: spacing[5],
+    backgroundColor: '#FFFFFFF2',
     borderWidth: 1,
-    borderColor: '#fff',
-    shadowColor: '#7a5cff',
-    shadowOffset: { width: 0, height: 20 },
-    shadowOpacity: 0.2,
-    shadowRadius: 30,
-    elevation: 8,
+    borderColor: '#FFFFFF',
+    ...shadows.xl,
   },
-  logo: {
+  formCardDesktop: {
     alignSelf: 'center',
-    marginBottom: 18,
+    padding: spacing[6],
+  },
+  formEyebrow: {
+    ...typography.label,
+    color: colors.brand.primary,
+    textTransform: 'uppercase',
+    textAlign: 'center',
+    marginBottom: spacing[3],
   },
   title: {
-    fontSize: 34,
-    fontWeight: '900',
+    ...typography.display.medium,
     textAlign: 'center',
-    marginBottom: 8,
-    color: '#2f1555',
+    marginBottom: spacing[3],
+    color: colors.text.primary,
   },
   subtitle: {
-    fontSize: 16,
+    ...typography.body.default,
     textAlign: 'center',
-    lineHeight: 23,
-    marginBottom: 28,
-    color: '#6e4c84',
+    marginBottom: spacing[5],
+    color: colors.text.secondary,
   },
   input: {
-    borderWidth: 2,
-    borderColor: '#f3d8ff',
-    borderRadius: 18,
-    padding: 16,
+    borderWidth: 1,
+    borderColor: colors.border.default,
+    borderRadius: radius.lg,
+    paddingHorizontal: spacing[4],
+    paddingVertical: 15,
     fontSize: 16,
-    marginBottom: 16,
-    color: '#2f1555',
-    backgroundColor: '#fff9ff',
+    marginBottom: spacing[4],
+    color: colors.text.primary,
+    backgroundColor: colors.background.card,
   },
   button: {
-    borderRadius: 20,
-    padding: 16,
+    borderRadius: radius.lg,
+    padding: spacing[4],
     alignItems: 'center',
-    marginTop: 8,
+    marginTop: spacing[2],
     overflow: 'hidden',
     backgroundColor: colors.brand.primary,
     shadowColor: colors.brand.primary,
@@ -434,13 +572,13 @@ const styles = StyleSheet.create({
   forgotPasswordButton: {
     alignSelf: 'flex-end',
     marginTop: -4,
-    marginBottom: 8,
+    marginBottom: spacing[2],
     paddingVertical: 4,
   },
   forgotPasswordText: {
-    color: '#7d22d8',
+    color: colors.brand.primary,
     fontSize: 14,
-    fontWeight: '800',
+    fontWeight: '700',
   },
   buttonDisabled: {
     opacity: 0.6,
@@ -451,62 +589,63 @@ const styles = StyleSheet.create({
   buttonText: {
     color: '#fff',
     fontSize: 16,
-    fontWeight: '900',
-    letterSpacing: 0.4,
+    fontWeight: '800',
+    letterSpacing: 0.2,
     zIndex: 1,
   },
   divider: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginVertical: 24,
+    marginVertical: spacing[5],
   },
   dividerLine: {
     flex: 1,
     height: 1,
-    backgroundColor: '#ead3f5',
+    backgroundColor: colors.border.subtle,
   },
   dividerText: {
-    marginHorizontal: 16,
-    color: '#8e63a5',
+    marginHorizontal: spacing[4],
+    color: colors.text.tertiary,
     fontSize: 14,
-    fontWeight: '800',
+    fontWeight: '700',
+    textTransform: 'uppercase',
   },
   socialButton: {
-    borderRadius: 18,
-    padding: 16,
+    borderRadius: radius.lg,
+    padding: spacing[4],
     alignItems: 'center',
-    marginBottom: 12,
-    borderWidth: 2,
+    marginBottom: spacing[3],
+    borderWidth: 1.5,
   },
   googleButton: {
-    borderColor: '#ffd0e8',
-    backgroundColor: '#fff',
+    borderColor: colors.border.default,
+    backgroundColor: colors.background.card,
   },
   appleButton: {
-    borderColor: '#2f1555',
-    backgroundColor: '#2f1555',
+    borderColor: colors.text.primary,
+    backgroundColor: colors.text.primary,
   },
   googleButtonText: {
     fontSize: 16,
-    fontWeight: '800',
-    color: '#58306d',
+    fontWeight: '700',
+    color: colors.text.primary,
   },
   appleButtonText: {
     fontSize: 16,
-    fontWeight: '800',
+    fontWeight: '700',
     color: '#fff',
   },
   linkButton: {
-    marginTop: 24,
+    marginTop: spacing[5],
     alignItems: 'center',
   },
   linkText: {
-    color: '#6e4c84',
+    color: colors.text.secondary,
     fontSize: 14,
   },
   linkTextBold: {
-    color: '#ff2d55',
-    fontWeight: '900',
+    color: colors.brand.primary,
+    fontWeight: '800',
   },
 });
 
