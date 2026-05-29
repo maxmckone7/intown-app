@@ -37,7 +37,7 @@ type Props = {
   totalFriends: number;
   groups?: FilterGroup[];
   getDayData?: (isoDate: string, groupId: string) => HeatmapDayData;
-  onDayPress?: (isoDate: string) => void;
+  onDayPress?: (isoDate: string, groupId: string) => void;
   onAddFriendsPress?: () => void;
   showEmptyStatePrompt?: boolean;
   onDismissEmptyState?: () => void;
@@ -86,10 +86,7 @@ export default function FriendsCalendar({
     showEmptyStatePrompt ?? !isEmptyStateDismissed;
 
   const handleDayPress = (iso: string) => {
-    if (onDayPress) onDayPress(iso);
-    // DES-14 will replace this console.log with a real day-detail modal
-    // eslint-disable-next-line no-console
-    console.log('day pressed:', iso);
+    onDayPress?.(iso, selectedGroupId);
   };
 
   const handleDismissEmptyState = () => {
@@ -178,6 +175,9 @@ export default function FriendsCalendar({
                 <Pressable
                   key={iso}
                   onPress={() => handleDayPress(iso)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${format(date, 'EEEE, MMM d')} — ${data.friendsInTown} in town`}
+                  accessibilityHint="Tap to see which friends are in town"
                   style={({ pressed, hovered }: any) => [
                     styles.cell,
                     { backgroundColor: bg },
