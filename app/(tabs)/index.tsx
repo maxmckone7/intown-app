@@ -112,6 +112,22 @@ export default function FriendsCalendarScreen() {
 
   const allFriendIds = useMemo(() => friends.map((friend) => friend.id), [friends]);
 
+  const selectedGroupFriendIds = useMemo(
+    () =>
+      selectedGroupId === 'all'
+        ? allFriendIds
+        : groups.find((group) => group.id === selectedGroupId)?.friendIds ?? [],
+    [allFriendIds, groups, selectedGroupId]
+  );
+
+  const modalFriends = useMemo(
+    () =>
+      selectedGroupId === 'all'
+        ? friends
+        : friends.filter((friend) => selectedGroupFriendIds.includes(friend.id)),
+    [friends, selectedGroupFriendIds, selectedGroupId]
+  );
+
   const statusesByDate = useMemo(() => {
     const byDate = new Map<string, Map<string, CalendarStatus>>();
 
@@ -177,7 +193,7 @@ export default function FriendsCalendarScreen() {
       <DayDetailModal
         visible={selectedDate !== null}
         date={selectedDate}
-        friends={friends}
+        friends={modalFriends}
         calendarEntries={friendEntries}
         onClose={() => setSelectedDate(null)}
       />
