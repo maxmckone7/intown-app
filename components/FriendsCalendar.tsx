@@ -1,10 +1,13 @@
 import { useMemo, useState } from 'react';
 import {
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   View,
+  useWindowDimensions,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   addMonths,
   eachDayOfInterval,
@@ -32,12 +35,18 @@ import {
 } from '../lib/heatmap';
 import Button from './Button';
 import GroupFilter, { DEFAULT_GROUPS, FilterGroup } from './GroupFilter';
+import { getCalendarLayout } from './calendarLayout';
 
 type Props = {
   totalFriends: number;
   groups?: FilterGroup[];
+  selectedGroupId?: string;
+  onSelectGroup?: (groupId: string) => void;
   getDayData?: (isoDate: string, groupId: string) => HeatmapDayData;
+  lastUpdatedAt?: Date | null;
+  isRefreshing?: boolean;
   onDayPress?: (isoDate: string) => void;
+  onDayPress?: (isoDate: string, groupId: string) => void;
   onAddFriendsPress?: () => void;
   showEmptyStatePrompt?: boolean;
   onDismissEmptyState?: () => void;
@@ -49,25 +58,36 @@ const ISO = (d: Date) => format(d, 'yyyy-MM-dd');
 export default function FriendsCalendar({
   totalFriends,
   groups = [],
+  selectedGroupId,
+  onSelectGroup,
   getDayData,
+  lastUpdatedAt,
+  isRefreshing,
   onDayPress,
   onAddFriendsPress,
   showEmptyStatePrompt,
   onDismissEmptyState,
 }: Props) {
   const today = startOfToday();
+  const { width } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
   const [viewMonth, setViewMonth] = useState<Date>(startOfMonth(today));
-  const [selectedGroupId, setSelectedGroupId] = useState<string>('all');
+  const [internalSelectedGroupId, setInternalSelectedGroupId] = useState<string>('all');
   const [isEmptyStateDismissed, setIsEmptyStateDismissed] = useState(false);
+  const layout = useMemo(
+    () => getCalendarLayout(width, { left: insets.left, right: insets.right }),
+    [insets.left, insets.right, width]
+  );
+  const activeGroupId = selectedGroupId ?? internalSelectedGroupId;
 
   const filterGroups = useMemo(
     () => [...DEFAULT_GROUPS, ...groups],
     [groups]
   );
 
-  const selectedGroup = filterGroups.find((group) => group.id === selectedGroupId);
+  const selectedGroup = filterGroups.find((group) => group.id === activeGroupId);
   const selectedTotalFriends =
-    selectedGroupId === 'all'
+    activeGroupId === 'all'
       ? totalFriends
       : selectedGroup?.friendIds?.length ?? 0;
 
@@ -84,12 +104,31 @@ export default function FriendsCalendar({
   const isEmpty = selectedTotalFriends <= 0;
   const shouldShowEmptyStatePrompt =
     showEmptyStatePrompt ?? !isEmptyStateDismissed;
+  const weekdayLabels = layout.compact
+    ? WEEKDAYS.map((day) => day.slice(0, 1))
+    : WEEKDAYS.map((day) => day.toUpperCase());
+  const freshnessLabel = isRefreshing
+    ? 'Refreshing availability...'
+    : lastUpdatedAt
+      ? `Updated ${format(lastUpdatedAt, 'h:mm a')}`
+      : 'Availability not updated yet';
 
   const handleDayPress = (iso: string) => {
-    if (onDayPress) onDayPress(iso);
-    // DES-14 will replace this console.log with a real day-detail modal
-    // eslint-disable-next-line no-console
-    console.log('day pressed:', iso);
+    onDayPress?.(iso, activeGroupId);
+  };
+
+  const handleGroupSelect = (groupId: string) => {
+    if (selectedGroupId === undefined) {
+      setInternalSelectedGroupId(groupId);
+    }
+    onSelectGroup?.(groupId);
+  };
+
+  const handleGroupSelect = (groupId: string) => {
+    if (selectedGroupId === undefined) {
+      setInternalSelectedGroupId(groupId);
+    }
+    onSelectGroup?.(groupId);
   };
 
   const handleDismissEmptyState = () => {
@@ -98,12 +137,23 @@ export default function FriendsCalendar({
   };
 
   return (
-    <View style={styles.outer}>
+    <View
+      style={[
+        styles.outer,
+        {
+          paddingLeft: layout.paddingLeft,
+          paddingRight: layout.paddingRight,
+          paddingTop: layout.compact ? spacing[4] : spacing[7],
+        },
+      ]}
+    >
       <View style={styles.inner}>
         <View style={styles.topRow}>
-          <View />
+          <Text style={styles.freshnessLabel}>{freshnessLabel}</Text>
           <Pressable
             onPress={goToday}
+            accessibilityRole="button"
+            accessibilityLabel="Go to current month"
             style={({ pressed, hovered }: any) => [
               styles.todayPill,
               (pressed || hovered) && styles.todayPillHover,
@@ -125,7 +175,12 @@ export default function FriendsCalendar({
           >
             <Text style={styles.monthArrowGlyph}>‹</Text>
           </Pressable>
-          <Text style={styles.monthLabel}>{format(viewMonth, 'MMMM yyyy')}</Text>
+          <Text
+            style={[styles.monthLabel, layout.compact && styles.monthLabelCompact]}
+            numberOfLines={1}
+          >
+            {format(viewMonth, 'MMMM yyyy')}
+          </Text>
           <Pressable
             onPress={goNext}
             accessibilityRole="button"
@@ -142,8 +197,8 @@ export default function FriendsCalendar({
         <View style={styles.filterRow}>
           <GroupFilter
             groups={filterGroups}
-            selectedGroupId={selectedGroupId}
-            onSelect={setSelectedGroupId}
+            selectedGroupId={activeGroupId}
+            onSelect={handleGroupSelect}
             onManagePress={() => {
               // DES-19 will replace this placeholder with the real
               // group management UI.
@@ -154,6 +209,16 @@ export default function FriendsCalendar({
           />
         </View>
 
+        <View style={[styles.calendarFrame, { padding: layout.framePadding }]}>
+          <ScrollView
+            horizontal
+            bounces={false}
+            scrollEnabled={layout.isScrollable}
+            showsHorizontalScrollIndicator={layout.isScrollable}
+          >
+            <View style={{ width: layout.gridWidth }}>
+              <View style={[styles.weekdayRow, { gap: layout.gap }]}>
+                {weekdayLabels.map((day, index) => (
         <View style={styles.calendarFrame}>
           <View style={styles.weekdayRow}>
             {WEEKDAYS.map((day) => (
@@ -169,7 +234,7 @@ export default function FriendsCalendar({
               const inMonth = isSameMonth(date, viewMonth);
               const todayCell = isSameDay(date, today);
               const data = getDayData
-                ? getDayData(iso, selectedGroupId)
+                ? getDayData(iso, activeGroupId)
                 : { date: iso, friendsInTown: 0, totalFriends: selectedTotalFriends };
               const bg = getHeatmapColor(data.friendsInTown, data.totalFriends);
               const dayNumber = format(date, 'd');
@@ -178,6 +243,9 @@ export default function FriendsCalendar({
                 <Pressable
                   key={iso}
                   onPress={() => handleDayPress(iso)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${format(date, 'EEEE, MMM d')} — ${data.friendsInTown} in town`}
+                  accessibilityHint="Tap to see which friends are in town"
                   style={({ pressed, hovered }: any) => [
                     styles.cell,
                     { backgroundColor: bg },
@@ -187,22 +255,82 @@ export default function FriendsCalendar({
                   ]}
                 >
                   <Text
+                    key={`${day}-${index}`}
                     style={[
-                      styles.dayNumber,
-                      !inMonth && styles.dayNumberOutsideMonth,
+                      styles.weekdayLabel,
+                      layout.compact && styles.weekdayLabelCompact,
+                      { width: layout.cellWidth },
                     ]}
                   >
-                    {dayNumber}
+                    {day}
                   </Text>
-                  {!isEmpty && (
-                    <Text style={styles.friendCount} numberOfLines={1}>
-                      {data.friendsInTown} in town
-                    </Text>
-                  )}
-                </Pressable>
-              );
-            })}
-          </View>
+                ))}
+              </View>
+
+              <View style={[styles.grid, { gap: layout.gap }]}>
+                {visibleDays.map((date) => {
+                  const iso = ISO(date);
+                  const inMonth = isSameMonth(date, viewMonth);
+                  const todayCell = isSameDay(date, today);
+                  const data = getDayData
+                    ? getDayData(iso, selectedGroupId)
+                    : { date: iso, friendsInTown: 0, totalFriends: selectedTotalFriends };
+                  const bg = getHeatmapColor(data.friendsInTown, data.totalFriends);
+                  const dayNumber = format(date, 'd');
+                  const friendCountLabel = `${data.friendsInTown} of ${data.totalFriends} friends in town`;
+
+                  return (
+                    <Pressable
+                      key={iso}
+                      onPress={() => handleDayPress(iso)}
+                      accessibilityRole="button"
+                      accessibilityLabel={`${format(date, 'EEEE, MMM d')} - ${friendCountLabel}`}
+                      accessibilityHint="Tap to view which friends are in town"
+                      hitSlop={layout.compact ? 0 : 4}
+                      style={({ pressed, hovered }: any) => [
+                        styles.cell,
+                        {
+                          backgroundColor: bg,
+                          borderRadius: layout.compact ? radius.sm : radius.md,
+                          height: layout.cellHeight,
+                          padding: layout.compact ? spacing[1] : spacing[2],
+                          width: layout.cellWidth,
+                        },
+                        !inMonth && styles.cellOutsideMonth,
+                        todayCell && styles.cellToday,
+                        hovered && styles.cellHover,
+                        pressed && styles.cellPressed,
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.dayNumber,
+                          layout.compact && styles.dayNumberCompact,
+                          !inMonth && styles.dayNumberOutsideMonth,
+                        ]}
+                      >
+                        {dayNumber}
+                      </Text>
+                      {!isEmpty && (
+                        <Text
+                          style={[
+                            styles.friendCount,
+                            layout.compact && styles.friendCountCompact,
+                            !inMonth && styles.friendCountOutsideMonth,
+                          ]}
+                          numberOfLines={1}
+                        >
+                          {layout.compact
+                            ? data.friendsInTown
+                            : `${data.friendsInTown} in town`}
+                        </Text>
+                      )}
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </View>
+          </ScrollView>
         </View>
 
         {isEmpty && shouldShowEmptyStatePrompt && (
@@ -244,15 +372,10 @@ export default function FriendsCalendar({
   );
 }
 
-const CELL_HEIGHT = 100;
-const CELL_GAP = spacing[2];
-
 const styles = StyleSheet.create({
   outer: {
     flex: 1,
-    paddingTop: spacing[7],
     paddingBottom: spacing[8],
-    paddingHorizontal: spacing[4],
     alignItems: 'center',
   },
   inner: {
@@ -270,6 +393,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing[4],
   },
   todayPill: {
+    minHeight: 44,
     paddingHorizontal: spacing[3],
     paddingVertical: spacing[2],
     borderRadius: radius.full,
@@ -287,6 +411,13 @@ const styles = StyleSheet.create({
     letterSpacing: typography.label.letterSpacing,
     color: colors.text.primary,
   },
+  freshnessLabel: {
+    fontFamily: fontFamilies.inter.medium,
+    fontSize: typography.label.fontSize,
+    fontWeight: '500',
+    letterSpacing: typography.label.letterSpacing,
+    color: colors.text.secondary,
+  },
   monthRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -295,8 +426,8 @@ const styles = StyleSheet.create({
     marginBottom: spacing[5],
   },
   monthArrow: {
-    width: 48,
-    height: 48,
+    width: 44,
+    height: 44,
     borderRadius: radius.full,
     alignItems: 'center',
     justifyContent: 'center',
@@ -312,44 +443,44 @@ const styles = StyleSheet.create({
   },
   monthLabel: {
     ...typography.calendar.month,
+    flexShrink: 1,
     color: colors.text.primary,
-    minWidth: 280,
+    minWidth: 0,
     textAlign: 'center',
+  },
+  monthLabelCompact: {
+    fontSize: typography.display.small.fontSize,
+    lineHeight: typography.display.small.lineHeight,
   },
   calendarFrame: {
     backgroundColor: colors.background.card,
     borderWidth: 1,
     borderColor: colors.border.subtle,
     borderRadius: radius.lg,
-    padding: spacing[3],
     ...shadows.sm,
   },
   weekdayRow: {
     flexDirection: 'row',
     marginBottom: spacing[3],
-    gap: CELL_GAP,
   },
   weekdayLabel: {
-    flex: 1,
     ...typography.calendar.weekday,
     color: colors.text.tertiary,
     textAlign: 'center',
   },
+  weekdayLabelCompact: {
+    fontSize: typography.caption.fontSize,
+    letterSpacing: 0.6,
+    lineHeight: typography.caption.lineHeight,
+  },
   grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: CELL_GAP,
   },
   cell: {
-    width: `${(100 - 6 * 1) / 7}%`, // approximate; gap handles the rest on web
-    flexGrow: 0,
-    flexShrink: 1,
-    flexBasis: `${(100 - 6) / 7}%`,
-    height: CELL_HEIGHT,
     borderRadius: radius.md,
     borderWidth: 1,
     borderColor: colors.border.subtle,
-    padding: spacing[2],
     justifyContent: 'space-between',
     ...shadows.sm,
   },
@@ -362,12 +493,18 @@ const styles = StyleSheet.create({
     ...shadows.md,
   },
   cellHover: {
-    transform: [{ scale: 1.02 }],
     ...shadows.md,
+  },
+  cellPressed: {
+    transform: [{ scale: 0.95 }],
   },
   dayNumber: {
     ...typography.calendar.dayNumber,
     color: colors.text.primary,
+  },
+  dayNumberCompact: {
+    fontSize: 20,
+    lineHeight: 24,
   },
   dayNumberOutsideMonth: {
     color: colors.text.secondary,
@@ -376,6 +513,14 @@ const styles = StyleSheet.create({
     ...typography.calendar.meta,
     color: 'rgba(255, 255, 255, 0.85)',
     alignSelf: 'flex-end',
+  },
+  friendCountCompact: {
+    fontSize: 10,
+    letterSpacing: 0.3,
+    lineHeight: 12,
+  },
+  friendCountOutsideMonth: {
+    color: colors.text.secondary,
   },
   emptyOverlay: {
     ...StyleSheet.absoluteFillObject,
@@ -397,8 +542,8 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: spacing[3],
     right: spacing[3],
-    width: 32,
-    height: 32,
+    width: 44,
+    height: 44,
     borderRadius: radius.full,
     alignItems: 'center',
     justifyContent: 'center',

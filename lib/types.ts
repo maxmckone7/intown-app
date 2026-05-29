@@ -62,6 +62,48 @@ export interface FriendGroup {
   updated_at: string;
 }
 
+export type NotificationChannel = 'push' | 'email';
+
+export type CoordinationNotificationType =
+  | 'weekend_in_town'
+  | 'back_in_town';
+
+export type CoordinationNotificationStatus =
+  | 'queued'
+  | 'sent'
+  | 'suppressed';
+
+export interface CoordinationNotificationPreferences {
+  user_id: string;
+  coordination_enabled: boolean;
+  weekend_in_town_enabled: boolean;
+  back_in_town_enabled: boolean;
+  delivery_channels: NotificationChannel[];
+  group_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CoordinationNotificationBatch {
+  id: string;
+  recipient_id: string;
+  notification_type: CoordinationNotificationType;
+  group_id: string | null;
+  starts_on: string;
+  ends_on: string;
+  friend_ids: string[];
+  title: string;
+  body: string;
+  deep_link: string;
+  channels: NotificationChannel[];
+  status: CoordinationNotificationStatus;
+  send_after: string;
+  sent_at: string | null;
+  batch_key: string;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface Invite {
   id: string;
   inviter_id: string;

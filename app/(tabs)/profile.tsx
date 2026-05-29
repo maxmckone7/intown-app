@@ -11,14 +11,26 @@ import {
   ScrollView,
   Image,
   Platform,
+  Switch,
 } from 'react-native';
 import type { KeyboardTypeOptions } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
 import { authService } from '../../services/auth';
+import {
+  CoordinationNotificationPreferenceUpdate,
+  coordinationNotificationsService,
+  getDefaultCoordinationNotificationPreferences,
+} from '../../services/coordinationNotifications';
+import { friendGroupsService } from '../../services/friendGroups';
 import { supabase } from '../../lib/supabase';
-import { User } from '../../lib/types';
+import {
+  CoordinationNotificationPreferences,
+  FriendGroup,
+  NotificationChannel,
+  User,
+} from '../../lib/types';
 import InviteFriends from '../../components/InviteFriends';
 import Button from '../../components/Button';
 import PrivacyModal from '../../components/PrivacyModal';
@@ -45,6 +57,23 @@ const SOCIAL_FIELDS: Array<{
   { key: 'x', label: 'X / Twitter', placeholder: '@username or profile URL' },
   { key: 'linkedin', label: 'LinkedIn', placeholder: 'Profile URL', keyboardType: 'url' },
   { key: 'website', label: 'Website', placeholder: 'https://example.com', keyboardType: 'url' },
+];
+
+const NOTIFICATION_CHANNELS: Array<{
+  key: NotificationChannel;
+  label: string;
+  description: string;
+}> = [
+  {
+    key: 'push',
+    label: 'Push',
+    description: 'Get an app notification when a batch is ready.',
+  },
+  {
+    key: 'email',
+    label: 'Email',
+    description: 'Send the same coordination summary to your account email.',
+  },
 ];
 
 const formatInterests = (value?: string[] | null) => {
@@ -166,6 +195,11 @@ export default function ProfileScreen() {
   const [location, setLocation] = useState('');
   const [interests, setInterests] = useState('');
   const [socialAccounts, setSocialAccounts] = useState<SocialAccounts>({});
+  const [notificationPreferences, setNotificationPreferences] =
+    useState<CoordinationNotificationPreferences | null>(null);
+  const [notificationGroups, setNotificationGroups] = useState<FriendGroup[]>([]);
+  const [savingNotificationPreferences, setSavingNotificationPreferences] =
+    useState(false);
   const router = useRouter();
   const toast = useToast();
 
@@ -196,16 +230,26 @@ export default function ProfileScreen() {
         return;
       }
 
-      const { data, error } = await supabase
-        .from('users')
-        .select('*')
-        .eq('id', authUser.id)
-        .single();
+      const [
+        { data, error },
+        coordinationPreferences,
+        groups,
+      ] = await Promise.all([
+        supabase
+          .from('users')
+          .select('*')
+          .eq('id', authUser.id)
+          .single(),
+        coordinationNotificationsService.getPreferences(authUser.id),
+        friendGroupsService.getGroups(authUser.id),
+      ]);
 
       if (error) throw error;
 
       setUser(data);
       populateProfileForm(data);
+      setNotificationPreferences(coordinationPreferences);
+      setNotificationGroups(groups);
     } catch (error: any) {
       Alert.alert('Error', error.message || 'Failed to load profile');
     } finally {
@@ -263,6 +307,64 @@ export default function ProfileScreen() {
 
   const handleSocialAccountChange = (key: SocialKey, value: string) => {
     setSocialAccounts((current) => ({ ...current, [key]: value }));
+  };
+
+  const getNotificationPreferences = () => {
+    if (!user) return null;
+    return (
+      notificationPreferences ||
+      getDefaultCoordinationNotificationPreferences(user.id)
+    );
+  };
+
+  const handleNotificationPreferenceChange = async (
+    updates: CoordinationNotificationPreferenceUpdate
+  ) => {
+    if (!user || savingNotificationPreferences) return;
+
+    const current =
+      notificationPreferences ||
+      getDefaultCoordinationNotificationPreferences(user.id);
+    const next = {
+      ...current,
+      ...updates,
+      delivery_channels: updates.delivery_channels || current.delivery_channels,
+      group_id: 'group_id' in updates ? updates.group_id ?? null : current.group_id,
+      updated_at: new Date().toISOString(),
+    };
+
+    setNotificationPreferences(next);
+    setSavingNotificationPreferences(true);
+
+    try {
+      const saved = await coordinationNotificationsService.updatePreferences(
+        user.id,
+        updates
+      );
+      setNotificationPreferences(saved);
+    } catch (error: any) {
+      setNotificationPreferences(current);
+      showAlert(
+        'Error',
+        error.message || 'Failed to update notification preferences'
+      );
+    } finally {
+      setSavingNotificationPreferences(false);
+    }
+  };
+
+  const handleNotificationChannelToggle = (channel: NotificationChannel) => {
+    const preferences = getNotificationPreferences();
+    if (!preferences) return;
+
+    const currentChannels = preferences.delivery_channels;
+    const nextChannels = currentChannels.includes(channel)
+      ? currentChannels.filter((current) => current !== channel)
+      : [...currentChannels, channel];
+
+    void handleNotificationPreferenceChange({
+      delivery_channels: nextChannels.length > 0 ? nextChannels : ['push'],
+    });
   };
 
   const handlePickAvatar = async () => {
@@ -371,6 +473,9 @@ export default function ProfileScreen() {
   const displayName = getDisplayName(user);
   const hasName = Boolean(user.name?.trim());
   const socialAccountCount = getSocialAccountCount(user.social_accounts);
+  const preferences = getNotificationPreferences();
+  const coordinationNotificationsEnabled =
+    preferences?.coordination_enabled ?? false;
 
   return (
     <>
@@ -556,6 +661,211 @@ export default function ProfileScreen() {
             </View>
           )}
         </View>
+
+        {preferences && (
+          <View style={styles.sectionCard}>
+            <View style={styles.sectionHeader}>
+              <View style={styles.sectionHeaderCopy}>
+                <Text style={styles.sectionTitle}>Coordination Notifications</Text>
+                <Text style={styles.sectionSubtitle}>
+                  Opt in to batched alerts when friends are around and jump
+                  straight to the relevant day.
+                </Text>
+              </View>
+              {savingNotificationPreferences && (
+                <ActivityIndicator color={colors.brand.primary} />
+              )}
+            </View>
+
+            <View style={styles.notificationList}>
+              <View style={styles.notificationRow}>
+                <View style={styles.notificationCopy}>
+                  <Text style={styles.notificationTitle}>Enable notifications</Text>
+                  <Text style={styles.notificationDescription}>
+                    Batch coordination updates before sending push or email alerts.
+                  </Text>
+                </View>
+                <Switch
+                  value={coordinationNotificationsEnabled}
+                  onValueChange={(value) =>
+                    void handleNotificationPreferenceChange({
+                      coordination_enabled: value,
+                    })
+                  }
+                  disabled={savingNotificationPreferences}
+                />
+              </View>
+
+              <View style={styles.notificationDivider} />
+
+              <Text style={styles.notificationGroupLabel}>Notify me when</Text>
+              <View style={styles.notificationRow}>
+                <View style={styles.notificationCopy}>
+                  <Text style={styles.notificationTitle}>
+                    Friends are in town this weekend
+                  </Text>
+                  <Text style={styles.notificationDescription}>
+                    Bundle Friday through Sunday availability into one summary.
+                  </Text>
+                </View>
+                <Switch
+                  value={preferences.weekend_in_town_enabled}
+                  onValueChange={(value) =>
+                    void handleNotificationPreferenceChange({
+                      weekend_in_town_enabled: value,
+                    })
+                  }
+                  disabled={
+                    !coordinationNotificationsEnabled ||
+                    savingNotificationPreferences
+                  }
+                />
+              </View>
+
+              <View style={styles.notificationRow}>
+                <View style={styles.notificationCopy}>
+                  <Text style={styles.notificationTitle}>
+                    A friend is back in town
+                  </Text>
+                  <Text style={styles.notificationDescription}>
+                    Queue a batched alert when a friend changes from away to in town.
+                  </Text>
+                </View>
+                <Switch
+                  value={preferences.back_in_town_enabled}
+                  onValueChange={(value) =>
+                    void handleNotificationPreferenceChange({
+                      back_in_town_enabled: value,
+                    })
+                  }
+                  disabled={
+                    !coordinationNotificationsEnabled ||
+                    savingNotificationPreferences
+                  }
+                />
+              </View>
+
+              <Text style={styles.notificationGroupLabel}>Send via</Text>
+              {NOTIFICATION_CHANNELS.map((channel) => (
+                <Pressable
+                  key={channel.key}
+                  onPress={() => handleNotificationChannelToggle(channel.key)}
+                  accessibilityRole="checkbox"
+                  accessibilityState={{
+                    checked: preferences.delivery_channels.includes(channel.key),
+                    disabled:
+                      !coordinationNotificationsEnabled ||
+                      savingNotificationPreferences,
+                  }}
+                  disabled={
+                    !coordinationNotificationsEnabled ||
+                    savingNotificationPreferences
+                  }
+                  style={({ pressed, hovered }: any) => [
+                    styles.notificationOption,
+                    preferences.delivery_channels.includes(channel.key) &&
+                      styles.notificationOptionSelected,
+                    (pressed || hovered) &&
+                      coordinationNotificationsEnabled &&
+                      styles.notificationOptionActive,
+                  ]}
+                >
+                  <View style={styles.notificationCopy}>
+                    <Text style={styles.notificationTitle}>{channel.label}</Text>
+                    <Text style={styles.notificationDescription}>
+                      {channel.description}
+                    </Text>
+                  </View>
+                  {preferences.delivery_channels.includes(channel.key) && (
+                    <Feather
+                      name="check-circle"
+                      size={20}
+                      color={colors.brand.primary}
+                    />
+                  )}
+                </Pressable>
+              ))}
+
+              <Text style={styles.notificationGroupLabel}>Friend scope</Text>
+              <View style={styles.notificationScopeList}>
+                <Pressable
+                  onPress={() =>
+                    void handleNotificationPreferenceChange({ group_id: null })
+                  }
+                  accessibilityRole="radio"
+                  accessibilityState={{
+                    selected: preferences.group_id === null,
+                    disabled:
+                      !coordinationNotificationsEnabled ||
+                      savingNotificationPreferences,
+                  }}
+                  disabled={
+                    !coordinationNotificationsEnabled ||
+                    savingNotificationPreferences
+                  }
+                  style={({ pressed, hovered }: any) => [
+                    styles.scopePill,
+                    preferences.group_id === null && styles.scopePillSelected,
+                    (pressed || hovered) &&
+                      coordinationNotificationsEnabled &&
+                      styles.scopePillActive,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.scopePillText,
+                      preferences.group_id === null &&
+                        styles.scopePillTextSelected,
+                    ]}
+                  >
+                    All friends
+                  </Text>
+                </Pressable>
+
+                {notificationGroups.map((group) => {
+                  const selected = preferences.group_id === group.id;
+                  return (
+                    <Pressable
+                      key={group.id}
+                      onPress={() =>
+                        void handleNotificationPreferenceChange({
+                          group_id: group.id,
+                        })
+                      }
+                      accessibilityRole="radio"
+                      accessibilityState={{
+                        selected,
+                        disabled:
+                          !coordinationNotificationsEnabled ||
+                          savingNotificationPreferences,
+                      }}
+                      disabled={
+                        !coordinationNotificationsEnabled ||
+                        savingNotificationPreferences
+                      }
+                      style={({ pressed, hovered }: any) => [
+                        styles.scopePill,
+                        selected && styles.scopePillSelected,
+                        (pressed || hovered) &&
+                          coordinationNotificationsEnabled &&
+                          styles.scopePillActive,
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.scopePillText,
+                          selected && styles.scopePillTextSelected,
+                        ]}
+                      >
+                        {group.name}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </View>
+          </View>
+        )}
 
         <View style={styles.sectionCard}>
           <View style={styles.sectionHeader}>
@@ -813,6 +1123,95 @@ const styles = StyleSheet.create({
   },
   accountAction: {
     minWidth: 150,
+  },
+  notificationList: {
+    gap: spacing[3],
+  },
+  notificationRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[3],
+    backgroundColor: colors.background.primary,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border.subtle,
+    padding: spacing[4],
+  },
+  notificationCopy: {
+    flex: 1,
+    gap: 3,
+  },
+  notificationTitle: {
+    fontFamily: fontFamilies.inter.medium,
+    fontSize: typography.body.default.fontSize,
+    fontWeight: '600',
+    color: colors.text.primary,
+  },
+  notificationDescription: {
+    fontFamily: fontFamilies.inter.regular,
+    fontSize: typography.body.small.fontSize,
+    lineHeight: typography.body.small.lineHeight,
+    color: colors.text.secondary,
+  },
+  notificationDivider: {
+    height: 1,
+    backgroundColor: colors.border.subtle,
+  },
+  notificationGroupLabel: {
+    fontFamily: fontFamilies.inter.medium,
+    fontSize: typography.label.fontSize,
+    fontWeight: '600',
+    letterSpacing: typography.label.letterSpacing,
+    color: colors.text.tertiary,
+    textTransform: 'uppercase',
+    marginTop: spacing[2],
+  },
+  notificationOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[3],
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border.subtle,
+    backgroundColor: colors.background.primary,
+    padding: spacing[4],
+  },
+  notificationOptionSelected: {
+    borderColor: colors.brand.primary,
+    backgroundColor: '#FFF6FA',
+  },
+  notificationOptionActive: {
+    backgroundColor: colors.background.secondary,
+  },
+  notificationScopeList: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing[2],
+  },
+  scopePill: {
+    borderRadius: radius.full,
+    borderWidth: 1,
+    borderColor: colors.border.default,
+    backgroundColor: colors.background.primary,
+    paddingHorizontal: spacing[4],
+    paddingVertical: spacing[2],
+  },
+  scopePillSelected: {
+    borderColor: colors.brand.primary,
+    backgroundColor: colors.brand.primary,
+  },
+  scopePillActive: {
+    backgroundColor: colors.background.secondary,
+  },
+  scopePillText: {
+    fontFamily: fontFamilies.inter.medium,
+    fontSize: typography.label.fontSize,
+    fontWeight: '600',
+    letterSpacing: typography.label.letterSpacing,
+    color: colors.text.primary,
+  },
+  scopePillTextSelected: {
+    color: '#FFFFFF',
   },
   inviteCard: {
     marginHorizontal: -spacing[4],
