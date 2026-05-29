@@ -84,6 +84,121 @@ CREATE TABLE IF NOT EXISTS public.invites (
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
+-- Notification preferences table
+CREATE TABLE IF NOT EXISTS public.notification_preferences (
+  user_id UUID PRIMARY KEY REFERENCES public.users(id) ON DELETE CASCADE,
+  coordination_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+  weekend_in_town_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+  back_in_town_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+  delivery_channels TEXT[] NOT NULL DEFAULT ARRAY['push']::TEXT[],
+  group_id UUID REFERENCES public.friend_groups(id) ON DELETE SET NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  CONSTRAINT notification_preferences_delivery_channels_check
+    CHECK (delivery_channels <@ ARRAY['push', 'email']::TEXT[])
+);
+
+ALTER TABLE public.notification_preferences
+  ADD COLUMN IF NOT EXISTS coordination_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+  ADD COLUMN IF NOT EXISTS weekend_in_town_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+  ADD COLUMN IF NOT EXISTS back_in_town_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+  ADD COLUMN IF NOT EXISTS delivery_channels TEXT[] NOT NULL DEFAULT ARRAY['push']::TEXT[],
+  ADD COLUMN IF NOT EXISTS group_id UUID REFERENCES public.friend_groups(id) ON DELETE SET NULL,
+  ADD COLUMN IF NOT EXISTS created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW();
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint
+    WHERE conname = 'notification_preferences_delivery_channels_check'
+  ) THEN
+    ALTER TABLE public.notification_preferences
+      ADD CONSTRAINT notification_preferences_delivery_channels_check
+      CHECK (delivery_channels <@ ARRAY['push', 'email']::TEXT[]);
+  END IF;
+END $$;
+
+-- Batched coordination notification queue. Delivery workers can query queued
+-- batches by send_after and fan out through the requested channels.
+CREATE TABLE IF NOT EXISTS public.coordination_notification_batches (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  recipient_id UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+  notification_type TEXT NOT NULL CHECK (
+    notification_type IN ('weekend_in_town', 'back_in_town')
+  ),
+  group_id UUID REFERENCES public.friend_groups(id) ON DELETE SET NULL,
+  starts_on DATE NOT NULL,
+  ends_on DATE NOT NULL,
+  friend_ids UUID[] NOT NULL DEFAULT '{}',
+  title TEXT NOT NULL,
+  body TEXT NOT NULL,
+  deep_link TEXT NOT NULL,
+  channels TEXT[] NOT NULL DEFAULT ARRAY['push']::TEXT[],
+  status TEXT NOT NULL DEFAULT 'queued' CHECK (
+    status IN ('queued', 'sent', 'suppressed')
+  ),
+  send_after TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+  sent_at TIMESTAMP WITH TIME ZONE,
+  batch_key TEXT NOT NULL UNIQUE,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  CONSTRAINT coordination_notification_batches_channels_check
+    CHECK (channels <@ ARRAY['push', 'email']::TEXT[])
+);
+
+ALTER TABLE public.coordination_notification_batches
+  ADD COLUMN IF NOT EXISTS recipient_id UUID REFERENCES public.users(id) ON DELETE CASCADE,
+  ADD COLUMN IF NOT EXISTS notification_type TEXT,
+  ADD COLUMN IF NOT EXISTS group_id UUID REFERENCES public.friend_groups(id) ON DELETE SET NULL,
+  ADD COLUMN IF NOT EXISTS starts_on DATE,
+  ADD COLUMN IF NOT EXISTS ends_on DATE,
+  ADD COLUMN IF NOT EXISTS friend_ids UUID[] NOT NULL DEFAULT '{}',
+  ADD COLUMN IF NOT EXISTS title TEXT,
+  ADD COLUMN IF NOT EXISTS body TEXT,
+  ADD COLUMN IF NOT EXISTS deep_link TEXT,
+  ADD COLUMN IF NOT EXISTS channels TEXT[] NOT NULL DEFAULT ARRAY['push']::TEXT[],
+  ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'queued',
+  ADD COLUMN IF NOT EXISTS send_after TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+  ADD COLUMN IF NOT EXISTS sent_at TIMESTAMP WITH TIME ZONE,
+  ADD COLUMN IF NOT EXISTS batch_key TEXT,
+  ADD COLUMN IF NOT EXISTS created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW();
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint
+    WHERE conname = 'coordination_notification_batches_type_check'
+  ) THEN
+    ALTER TABLE public.coordination_notification_batches
+      ADD CONSTRAINT coordination_notification_batches_type_check
+      CHECK (notification_type IN ('weekend_in_town', 'back_in_town'));
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint
+    WHERE conname = 'coordination_notification_batches_status_check'
+  ) THEN
+    ALTER TABLE public.coordination_notification_batches
+      ADD CONSTRAINT coordination_notification_batches_status_check
+      CHECK (status IN ('queued', 'sent', 'suppressed'));
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint
+    WHERE conname = 'coordination_notification_batches_channels_check'
+  ) THEN
+    ALTER TABLE public.coordination_notification_batches
+      ADD CONSTRAINT coordination_notification_batches_channels_check
+      CHECK (channels <@ ARRAY['push', 'email']::TEXT[]);
+  END IF;
+END $$;
+
 -- Create indexes for performance
 CREATE INDEX IF NOT EXISTS idx_users_email_lower ON public.users (lower(email));
 CREATE INDEX IF NOT EXISTS idx_users_name_lower ON public.users (lower(name));
@@ -99,6 +214,13 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_invites_token ON public.invites(token);
 CREATE INDEX IF NOT EXISTS idx_invites_inviter_id ON public.invites(inviter_id);
 CREATE INDEX IF NOT EXISTS idx_invites_accepted_by ON public.invites(accepted_by);
 CREATE INDEX IF NOT EXISTS idx_invites_status ON public.invites(status);
+CREATE INDEX IF NOT EXISTS idx_notification_preferences_group_id ON public.notification_preferences(group_id);
+CREATE INDEX IF NOT EXISTS idx_coordination_batches_recipient_status
+  ON public.coordination_notification_batches(recipient_id, status, send_after);
+CREATE INDEX IF NOT EXISTS idx_coordination_batches_status_send_after
+  ON public.coordination_notification_batches(status, send_after);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_coordination_batches_batch_key
+  ON public.coordination_notification_batches(batch_key);
 
 -- Enable Row Level Security
 ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
@@ -106,6 +228,8 @@ ALTER TABLE public.friendships ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.calendar_entries ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.friend_groups ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.invites ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.notification_preferences ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.coordination_notification_batches ENABLE ROW LEVEL SECURITY;
 
 -- RLS Policies for users table
 -- Users can read their own profile and profiles of their friends
@@ -233,6 +357,28 @@ DROP POLICY IF EXISTS "Users can delete own invites" ON public.invites;
 CREATE POLICY "Users can delete own invites" ON public.invites
   FOR DELETE USING (inviter_id = auth.uid());
 
+-- RLS Policies for notification preferences
+DROP POLICY IF EXISTS "Users can view own notification preferences" ON public.notification_preferences;
+CREATE POLICY "Users can view own notification preferences" ON public.notification_preferences
+  FOR SELECT USING (user_id = auth.uid());
+
+DROP POLICY IF EXISTS "Users can create own notification preferences" ON public.notification_preferences;
+CREATE POLICY "Users can create own notification preferences" ON public.notification_preferences
+  FOR INSERT WITH CHECK (user_id = auth.uid());
+
+DROP POLICY IF EXISTS "Users can update own notification preferences" ON public.notification_preferences;
+CREATE POLICY "Users can update own notification preferences" ON public.notification_preferences
+  FOR UPDATE USING (user_id = auth.uid()) WITH CHECK (user_id = auth.uid());
+
+DROP POLICY IF EXISTS "Users can delete own notification preferences" ON public.notification_preferences;
+CREATE POLICY "Users can delete own notification preferences" ON public.notification_preferences
+  FOR DELETE USING (user_id = auth.uid());
+
+-- RLS Policies for coordination notification batches
+DROP POLICY IF EXISTS "Users can view own coordination notification batches" ON public.coordination_notification_batches;
+CREATE POLICY "Users can view own coordination notification batches" ON public.coordination_notification_batches
+  FOR SELECT USING (recipient_id = auth.uid());
+
 -- Function to automatically create user profile on signup
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER AS $$
@@ -327,11 +473,208 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
+CREATE OR REPLACE FUNCTION public.build_coordination_deep_link(
+  target_date DATE,
+  target_group_id UUID
+)
+RETURNS TEXT AS $$
+BEGIN
+  IF target_group_id IS NULL THEN
+    RETURN 'intown:///?date=' || target_date::TEXT;
+  END IF;
+
+  RETURN 'intown:///?date=' || target_date::TEXT || '&groupId=' || target_group_id::TEXT;
+END;
+$$ LANGUAGE plpgsql IMMUTABLE;
+
+CREATE OR REPLACE FUNCTION public.upsert_coordination_notification_batch(
+  target_recipient_id UUID,
+  target_notification_type TEXT,
+  target_group_id UUID,
+  target_starts_on DATE,
+  target_ends_on DATE,
+  target_friend_id UUID,
+  target_title TEXT,
+  target_body TEXT,
+  target_deep_link TEXT,
+  target_channels TEXT[],
+  target_send_after TIMESTAMP WITH TIME ZONE
+)
+RETURNS VOID AS $$
+DECLARE
+  target_batch_key TEXT := target_recipient_id::TEXT
+    || ':'
+    || target_notification_type
+    || ':'
+    || COALESCE(target_group_id::TEXT, 'all')
+    || ':'
+    || target_starts_on::TEXT
+    || ':'
+    || target_ends_on::TEXT;
+BEGIN
+  INSERT INTO public.coordination_notification_batches (
+    recipient_id,
+    notification_type,
+    group_id,
+    starts_on,
+    ends_on,
+    friend_ids,
+    title,
+    body,
+    deep_link,
+    channels,
+    send_after,
+    batch_key
+  )
+  VALUES (
+    target_recipient_id,
+    target_notification_type,
+    target_group_id,
+    target_starts_on,
+    target_ends_on,
+    ARRAY[target_friend_id],
+    target_title,
+    target_body,
+    target_deep_link,
+    target_channels,
+    target_send_after,
+    target_batch_key
+  )
+  ON CONFLICT (batch_key) DO UPDATE SET
+    friend_ids = ARRAY(
+      SELECT DISTINCT friend_id
+      FROM unnest(
+        public.coordination_notification_batches.friend_ids
+        || EXCLUDED.friend_ids
+      ) AS friend_id
+    ),
+    channels = ARRAY(
+      SELECT DISTINCT channel
+      FROM unnest(
+        public.coordination_notification_batches.channels
+        || EXCLUDED.channels
+      ) AS channel
+    ),
+    send_after = LEAST(
+      public.coordination_notification_batches.send_after,
+      EXCLUDED.send_after
+    ),
+    title = EXCLUDED.title,
+    body = EXCLUDED.body,
+    deep_link = EXCLUDED.deep_link,
+    updated_at = NOW()
+  WHERE public.coordination_notification_batches.status = 'queued';
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
+
+CREATE OR REPLACE FUNCTION public.enqueue_coordination_notifications()
+RETURNS TRIGGER AS $$
+DECLARE
+  changed_friend_label TEXT;
+  day_of_week INTEGER;
+  weekend_start DATE;
+  weekend_end DATE;
+  is_back_in_town BOOLEAN;
+  recipient RECORD;
+  scoped_label TEXT;
+BEGIN
+  IF NEW.status <> 'in_town' THEN
+    RETURN NEW;
+  END IF;
+
+  IF TG_OP = 'UPDATE' AND OLD.status = NEW.status AND OLD.date = NEW.date THEN
+    RETURN NEW;
+  END IF;
+
+  SELECT COALESCE(name, email, 'A friend')
+  INTO changed_friend_label
+  FROM public.users
+  WHERE id = NEW.user_id;
+
+  day_of_week := EXTRACT(ISODOW FROM NEW.date)::INTEGER;
+  weekend_start := NEW.date - GREATEST(day_of_week - 5, 0);
+  weekend_end := weekend_start + 2;
+  is_back_in_town := TG_OP = 'UPDATE'
+    AND OLD.status = 'out_of_town'
+    AND NEW.status = 'in_town';
+
+  FOR recipient IN
+    SELECT
+      preferences.user_id,
+      preferences.weekend_in_town_enabled,
+      preferences.back_in_town_enabled,
+      preferences.delivery_channels,
+      preferences.group_id,
+      groups.name AS group_name
+    FROM public.friendships friendships
+    JOIN public.notification_preferences preferences
+      ON preferences.user_id = friendships.user_id
+    LEFT JOIN public.friend_groups groups
+      ON groups.id = preferences.group_id
+      AND groups.user_id = preferences.user_id
+    WHERE friendships.friend_id = NEW.user_id
+      AND friendships.status = 'accepted'
+      AND preferences.coordination_enabled = TRUE
+      AND (
+        preferences.group_id IS NULL
+        OR NEW.user_id = ANY(COALESCE(groups.friend_ids, '{}'::UUID[]))
+      )
+  LOOP
+    scoped_label := CASE
+      WHEN recipient.group_id IS NULL THEN 'Friends'
+      ELSE COALESCE(recipient.group_name, 'Close friends')
+    END;
+
+    IF day_of_week BETWEEN 5 AND 7 AND recipient.weekend_in_town_enabled THEN
+      PERFORM public.upsert_coordination_notification_batch(
+        recipient.user_id,
+        'weekend_in_town',
+        recipient.group_id,
+        weekend_start,
+        weekend_end,
+        NEW.user_id,
+        scoped_label || ' are in town this weekend',
+        'Open InTown to see who is around and coordinate plans.',
+        public.build_coordination_deep_link(NEW.date, recipient.group_id),
+        recipient.delivery_channels,
+        GREATEST(
+          NOW() + INTERVAL '15 minutes',
+          (weekend_start::TIMESTAMP AT TIME ZONE 'UTC') - INTERVAL '18 hours'
+        )
+      );
+    END IF;
+
+    IF is_back_in_town AND recipient.back_in_town_enabled THEN
+      PERFORM public.upsert_coordination_notification_batch(
+        recipient.user_id,
+        'back_in_town',
+        recipient.group_id,
+        NEW.date,
+        NEW.date,
+        NEW.user_id,
+        changed_friend_label || ' is back in town',
+        'Tap to see when they are around and coordinate plans.',
+        public.build_coordination_deep_link(NEW.date, recipient.group_id),
+        recipient.delivery_channels,
+        NOW() + INTERVAL '15 minutes'
+      );
+    END IF;
+  END LOOP;
+
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
+
 -- Trigger to update updated_at on calendar_entries
 DROP TRIGGER IF EXISTS update_calendar_entries_updated_at ON public.calendar_entries;
 CREATE TRIGGER update_calendar_entries_updated_at
   BEFORE UPDATE ON public.calendar_entries
   FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+
+DROP TRIGGER IF EXISTS enqueue_coordination_notifications ON public.calendar_entries;
+CREATE TRIGGER enqueue_coordination_notifications
+  AFTER INSERT OR UPDATE OF status, date ON public.calendar_entries
+  FOR EACH ROW EXECUTE FUNCTION public.enqueue_coordination_notifications();
 
 DROP TRIGGER IF EXISTS update_users_updated_at ON public.users;
 CREATE TRIGGER update_users_updated_at
@@ -346,5 +689,15 @@ CREATE TRIGGER update_friend_groups_updated_at
 DROP TRIGGER IF EXISTS update_invites_updated_at ON public.invites;
 CREATE TRIGGER update_invites_updated_at
   BEFORE UPDATE ON public.invites
+  FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+
+DROP TRIGGER IF EXISTS update_notification_preferences_updated_at ON public.notification_preferences;
+CREATE TRIGGER update_notification_preferences_updated_at
+  BEFORE UPDATE ON public.notification_preferences
+  FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+
+DROP TRIGGER IF EXISTS update_coordination_notification_batches_updated_at ON public.coordination_notification_batches;
+CREATE TRIGGER update_coordination_notification_batches_updated_at
+  BEFORE UPDATE ON public.coordination_notification_batches
   FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
 

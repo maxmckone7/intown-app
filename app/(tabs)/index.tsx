@@ -7,6 +7,7 @@ import {
   StyleSheet,
   View,
 } from 'react-native';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { format } from 'date-fns';
 import { useRouter } from 'expo-router';
 import { authService } from '../../services/auth';
@@ -27,6 +28,10 @@ import DayDetailModal from '../../components/DayDetailModal';
 import { CalendarSkeleton } from '../../components/Skeleton';
 import { colors } from '../../theme';
 
+const getSingleParam = (value?: string | string[]) =>
+  Array.isArray(value) ? value[0] : value;
+
+const isIsoDate = (value: string) => /^\d{4}-\d{2}-\d{2}$/.test(value);
 type SelectedDay = {
   date: string;
   groupId: string;
@@ -62,6 +67,12 @@ function openEmail(recipients: string[], subject: string, body: string) {
 
 export default function FriendsCalendarScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams<{
+    date?: string | string[];
+    groupId?: string | string[];
+  }>();
+  const routeDate = getSingleParam(params.date);
+  const routeGroupId = getSingleParam(params.groupId);
   const [userId, setUserId] = useState<string | null>(null);
   const [friends, setFriends] = useState<FriendWithStatus[]>([]);
   const [friendGroups, setFriendGroups] = useState<FriendGroup[]>([]);
@@ -69,12 +80,24 @@ export default function FriendsCalendarScreen() {
     Array<CalendarEntry & { friend_name: string; friend_id: string }>
   >([]);
   const [loading, setLoading] = useState(true);
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [selectedGroupId, setSelectedGroupId] = useState<string>('all');
   const [selectedDay, setSelectedDay] = useState<SelectedDay | null>(null);
   const [showAddFriendsPrompt, setShowAddFriendsPrompt] = useState(false);
 
   useEffect(() => {
     loadUserAndFriends();
   }, []);
+
+  useEffect(() => {
+    if (routeDate && isIsoDate(routeDate)) {
+      setSelectedDate(routeDate);
+    }
+
+    if (routeGroupId) {
+      setSelectedGroupId(routeGroupId);
+    }
+  }, [routeDate, routeGroupId]);
 
   const loadUserAndFriends = async () => {
     try {
@@ -219,6 +242,8 @@ export default function FriendsCalendarScreen() {
         <FriendsCalendar
           totalFriends={friends.length}
           groups={groups}
+          selectedGroupId={selectedGroupId}
+          onSelectGroup={setSelectedGroupId}
           getDayData={getDayData}
           onDayPress={(iso, groupId) => setSelectedDay({ date: iso, groupId })}
           onAddFriendsPress={handleAddFriendsPress}

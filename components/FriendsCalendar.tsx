@@ -36,6 +36,8 @@ import GroupFilter, { DEFAULT_GROUPS, FilterGroup } from './GroupFilter';
 type Props = {
   totalFriends: number;
   groups?: FilterGroup[];
+  selectedGroupId?: string;
+  onSelectGroup?: (groupId: string) => void;
   getDayData?: (isoDate: string, groupId: string) => HeatmapDayData;
   onDayPress?: (isoDate: string, groupId: string) => void;
   onAddFriendsPress?: () => void;
@@ -49,6 +51,8 @@ const ISO = (d: Date) => format(d, 'yyyy-MM-dd');
 export default function FriendsCalendar({
   totalFriends,
   groups = [],
+  selectedGroupId,
+  onSelectGroup,
   getDayData,
   onDayPress,
   onAddFriendsPress,
@@ -57,17 +61,18 @@ export default function FriendsCalendar({
 }: Props) {
   const today = startOfToday();
   const [viewMonth, setViewMonth] = useState<Date>(startOfMonth(today));
-  const [selectedGroupId, setSelectedGroupId] = useState<string>('all');
+  const [internalSelectedGroupId, setInternalSelectedGroupId] = useState<string>('all');
   const [isEmptyStateDismissed, setIsEmptyStateDismissed] = useState(false);
+  const activeGroupId = selectedGroupId ?? internalSelectedGroupId;
 
   const filterGroups = useMemo(
     () => [...DEFAULT_GROUPS, ...groups],
     [groups]
   );
 
-  const selectedGroup = filterGroups.find((group) => group.id === selectedGroupId);
+  const selectedGroup = filterGroups.find((group) => group.id === activeGroupId);
   const selectedTotalFriends =
-    selectedGroupId === 'all'
+    activeGroupId === 'all'
       ? totalFriends
       : selectedGroup?.friendIds?.length ?? 0;
 
@@ -87,6 +92,13 @@ export default function FriendsCalendar({
 
   const handleDayPress = (iso: string) => {
     onDayPress?.(iso, selectedGroupId);
+  };
+
+  const handleGroupSelect = (groupId: string) => {
+    if (selectedGroupId === undefined) {
+      setInternalSelectedGroupId(groupId);
+    }
+    onSelectGroup?.(groupId);
   };
 
   const handleDismissEmptyState = () => {
@@ -139,8 +151,8 @@ export default function FriendsCalendar({
         <View style={styles.filterRow}>
           <GroupFilter
             groups={filterGroups}
-            selectedGroupId={selectedGroupId}
-            onSelect={setSelectedGroupId}
+            selectedGroupId={activeGroupId}
+            onSelect={handleGroupSelect}
             onManagePress={() => {
               // DES-19 will replace this placeholder with the real
               // group management UI.
@@ -166,7 +178,7 @@ export default function FriendsCalendar({
               const inMonth = isSameMonth(date, viewMonth);
               const todayCell = isSameDay(date, today);
               const data = getDayData
-                ? getDayData(iso, selectedGroupId)
+                ? getDayData(iso, activeGroupId)
                 : { date: iso, friendsInTown: 0, totalFriends: selectedTotalFriends };
               const bg = getHeatmapColor(data.friendsInTown, data.totalFriends);
               const dayNumber = format(date, 'd');
