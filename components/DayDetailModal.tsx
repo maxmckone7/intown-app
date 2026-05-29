@@ -196,8 +196,6 @@ export default function DayDetailModal({
                   return (
                     <Pressable
                       key={friend.id}
-                      accessibilityRole="button"
-                      accessibilityLabel={`${displayName}, ${status}`}
                       style={({ hovered }: any) => [
                         styles.friendRow,
                         hovered && styles.friendRowHover,
@@ -214,7 +212,7 @@ export default function DayDetailModal({
                         )}
                       </View>
                       <View style={styles.friendBody}>
-                        <Text style={styles.friendName}>
+                        <Text style={styles.friendName} numberOfLines={1}>
                           {displayName}
                         </Text>
                         <Text style={styles.friendStatus}>{status}</Text>
