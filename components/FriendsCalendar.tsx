@@ -39,6 +39,9 @@ type Props = {
   selectedGroupId?: string;
   onSelectGroup?: (groupId: string) => void;
   getDayData?: (isoDate: string, groupId: string) => HeatmapDayData;
+  lastUpdatedAt?: Date | null;
+  isRefreshing?: boolean;
+  onDayPress?: (isoDate: string) => void;
   onDayPress?: (isoDate: string, groupId: string) => void;
   onAddFriendsPress?: () => void;
   showEmptyStatePrompt?: boolean;
@@ -54,6 +57,8 @@ export default function FriendsCalendar({
   selectedGroupId,
   onSelectGroup,
   getDayData,
+  lastUpdatedAt,
+  isRefreshing,
   onDayPress,
   onAddFriendsPress,
   showEmptyStatePrompt,
@@ -89,6 +94,11 @@ export default function FriendsCalendar({
   const isEmpty = selectedTotalFriends <= 0;
   const shouldShowEmptyStatePrompt =
     showEmptyStatePrompt ?? !isEmptyStateDismissed;
+  const freshnessLabel = isRefreshing
+    ? 'Refreshing availability...'
+    : lastUpdatedAt
+      ? `Updated ${format(lastUpdatedAt, 'h:mm a')}`
+      : 'Availability not updated yet';
 
   const handleDayPress = (iso: string) => {
     onDayPress?.(iso, selectedGroupId);
@@ -110,7 +120,7 @@ export default function FriendsCalendar({
     <View style={styles.outer}>
       <View style={styles.inner}>
         <View style={styles.topRow}>
-          <View />
+          <Text style={styles.freshnessLabel}>{freshnessLabel}</Text>
           <Pressable
             onPress={goToday}
             style={({ pressed, hovered }: any) => [
@@ -298,6 +308,13 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     letterSpacing: typography.label.letterSpacing,
     color: colors.text.primary,
+  },
+  freshnessLabel: {
+    fontFamily: fontFamilies.inter.medium,
+    fontSize: typography.label.fontSize,
+    fontWeight: '500',
+    letterSpacing: typography.label.letterSpacing,
+    color: colors.text.secondary,
   },
   monthRow: {
     flexDirection: 'row',
