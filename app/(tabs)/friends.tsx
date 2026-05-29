@@ -40,9 +40,9 @@ type FriendStatus = {
 };
 
 const STATUS_COLORS: Record<FriendStatusState, { text: string; bg: string }> = {
-  in_town: { text: '#4D6A50', bg: 'rgba(134, 167, 137, 0.2)' },
-  away: { text: '#8A3B32', bg: 'rgba(196, 90, 77, 0.18)' },
-  unknown: { text: colors.text.tertiary, bg: 'rgba(120, 113, 108, 0.12)' },
+  in_town: colors.status.inTown,
+  away: colors.status.away,
+  unknown: colors.status.neutral,
 };
 
 const buildStatus = (

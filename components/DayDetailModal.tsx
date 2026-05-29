@@ -421,7 +421,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   messageButtonHover: {
-    backgroundColor: '#FCE7EE',
+    backgroundColor: colors.brand.primarySoft,
   },
   messageButtonText: {
     fontFamily: fontFamilies.inter.medium,

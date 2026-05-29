@@ -28,7 +28,7 @@ function useGlobalWebStyles() {
     style.textContent = `
       *:focus { outline: none; }
       *:focus-visible {
-        outline: 2px solid ${colors.brand.primary};
+        outline: 2px solid ${colors.focusRing};
         outline-offset: 2px;
         border-radius: 6px;
       }
