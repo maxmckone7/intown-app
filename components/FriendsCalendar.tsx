@@ -32,6 +32,7 @@ import {
 import {
   getHeatmapColor,
   HeatmapDayData,
+  HEATMAP_SCALE,
 } from '../lib/heatmap';
 import Button from './Button';
 import GroupFilter, { DEFAULT_GROUPS, FilterGroup } from './GroupFilter';
@@ -53,6 +54,9 @@ type Props = {
 
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const ISO = (d: Date) => format(d, 'yyyy-MM-dd');
+
+// Few → most, for the legend (HEATMAP_SCALE is ordered most → few).
+const LEGEND_STEPS = [...HEATMAP_SCALE].reverse();
 
 export default function FriendsCalendar({
   totalFriends,
@@ -96,6 +100,20 @@ export default function FriendsCalendar({
     return eachDayOfInterval({ start: gridStart, end: gridEnd });
   }, [viewMonth]);
 
+  // Busiest in-view day this month, for the hero summary. Reads straight from
+  // getDayData so it never diverges from the cells.
+  const peak = useMemo(() => {
+    if (!getDayData || selectedTotalFriends <= 0) return null;
+    let best: { iso: string; count: number } | null = null;
+    for (const date of visibleDays) {
+      if (!isSameMonth(date, viewMonth)) continue;
+      const iso = ISO(date);
+      const count = getDayData(iso, activeGroupId).friendsInTown;
+      if (!best || count > best.count) best = { iso, count };
+    }
+    return best && best.count > 0 ? best : null;
+  }, [getDayData, visibleDays, viewMonth, activeGroupId, selectedTotalFriends]);
+
   const goPrev = () => setViewMonth((d) => subMonths(d, 1));
   const goNext = () => setViewMonth((d) => addMonths(d, 1));
   const goToday = () => setViewMonth(startOfMonth(today));
@@ -111,6 +129,14 @@ export default function FriendsCalendar({
     : lastUpdatedAt
       ? `Updated ${format(lastUpdatedAt, 'h:mm a')}`
       : 'Availability not updated yet';
+  const heroSubtitle = isEmpty
+    ? 'Follow friends to light up the days they’re around.'
+    : peak
+      ? `Busiest day this month: ${format(
+          new Date(`${peak.iso}T00:00:00`),
+          'EEEE, MMM d'
+        )} — ${peak.count} around.`
+      : 'Tap any day to see who’s in town.';
 
   const handleDayPress = (iso: string) => {
     onDayPress?.(iso, activeGroupId);
@@ -140,6 +166,13 @@ export default function FriendsCalendar({
       ]}
     >
       <View style={styles.inner}>
+        {!layout.compact && (
+          <View style={styles.hero}>
+            <Text style={styles.heroTitle}>Who’s around</Text>
+            <Text style={styles.heroSubtitle}>{heroSubtitle}</Text>
+          </View>
+        )}
+
         <View style={styles.topRow}>
           <Text style={styles.freshnessLabel}>{freshnessLabel}</Text>
           <Pressable
@@ -234,6 +267,7 @@ export default function FriendsCalendar({
                     : { date: iso, friendsInTown: 0, totalFriends: selectedTotalFriends };
                   const bg = getHeatmapColor(data.friendsInTown, data.totalFriends);
                   const dayNumber = format(date, 'd');
+                  const tinted = inMonth && data.totalFriends > 0;
                   const friendCountLabel = `${data.friendsInTown} of ${data.totalFriends} friends in town`;
 
                   return (
@@ -247,7 +281,7 @@ export default function FriendsCalendar({
                       style={({ pressed, hovered }: any) => [
                         styles.cell,
                         {
-                          backgroundColor: bg,
+                          backgroundColor: tinted ? bg : colors.heatmap.empty,
                           borderRadius: layout.compact ? radius.sm : radius.md,
                           height: layout.cellHeight,
                           padding: layout.compact ? spacing[1] : spacing[2],
@@ -259,27 +293,36 @@ export default function FriendsCalendar({
                         pressed && styles.cellPressed,
                       ]}
                     >
-                      <Text
-                        style={[
-                          styles.dayNumber,
-                          layout.compact && styles.dayNumberCompact,
-                          !inMonth && styles.dayNumberOutsideMonth,
-                        ]}
-                      >
-                        {dayNumber}
-                      </Text>
-                      {!isEmpty && (
+                      <View style={styles.cellTopRow}>
+                        <Text
+                          style={[
+                            styles.dayNumber,
+                            layout.compact && styles.dayNumberCompact,
+                            tinted && styles.dayNumberTinted,
+                            !inMonth && styles.dayNumberOutsideMonth,
+                          ]}
+                        >
+                          {dayNumber}
+                        </Text>
+                        {todayCell && <View style={styles.todayDot} />}
+                      </View>
+                      {!isEmpty && !layout.compact && (
+                        <View style={styles.countPill}>
+                          <Text style={styles.countPillText} numberOfLines={1}>
+                            {`${data.friendsInTown} in town`}
+                          </Text>
+                        </View>
+                      )}
+                      {!isEmpty && layout.compact && (
                         <Text
                           style={[
                             styles.friendCount,
-                            layout.compact && styles.friendCountCompact,
+                            styles.friendCountCompact,
                             !inMonth && styles.friendCountOutsideMonth,
                           ]}
                           numberOfLines={1}
                         >
-                          {layout.compact
-                            ? data.friendsInTown
-                            : `${data.friendsInTown} in town`}
+                          {data.friendsInTown}
                         </Text>
                       )}
                     </Pressable>
@@ -288,6 +331,21 @@ export default function FriendsCalendar({
               </View>
             </View>
           </ScrollView>
+
+          {!isEmpty && !layout.compact && (
+            <View style={styles.legend}>
+              <Text style={styles.legendLabel}>Fewer</Text>
+              <View style={styles.legendSwatches}>
+                {LEGEND_STEPS.map((step) => (
+                  <View
+                    key={step.label}
+                    style={[styles.legendSwatch, { backgroundColor: step.color }]}
+                  />
+                ))}
+              </View>
+              <Text style={styles.legendLabel}>More in town</Text>
+            </View>
+          )}
         </View>
 
         {isEmpty && shouldShowEmptyStatePrompt && (
@@ -339,6 +397,67 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: 1200,
     position: 'relative',
+  },
+  hero: {
+    alignItems: 'center',
+    marginBottom: spacing[5],
+  },
+  heroTitle: {
+    ...typography.display.medium,
+    color: colors.text.primary,
+    textAlign: 'center',
+  },
+  heroSubtitle: {
+    ...typography.body.large,
+    color: colors.text.secondary,
+    textAlign: 'center',
+    marginTop: spacing[2],
+    maxWidth: 560,
+  },
+  cellTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  todayDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: colors.brand.primary,
+  },
+  countPill: {
+    alignSelf: 'flex-start',
+    backgroundColor: 'rgba(255, 255, 255, 0.78)',
+    borderRadius: radius.full,
+    paddingHorizontal: spacing[2],
+    paddingVertical: 2,
+  },
+  countPillText: {
+    ...typography.calendar.meta,
+    color: colors.text.primary,
+  },
+  legend: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing[2],
+    marginTop: spacing[3],
+    paddingTop: spacing[3],
+    borderTopWidth: 1,
+    borderTopColor: colors.border.subtle,
+  },
+  legendLabel: {
+    ...typography.caption,
+    color: colors.text.tertiary,
+  },
+  legendSwatches: {
+    flexDirection: 'row',
+    gap: 3,
+  },
+  legendSwatch: {
+    width: 18,
+    height: 12,
+    borderRadius: 3,
   },
   topRow: {
     flexDirection: 'row',
@@ -462,6 +581,12 @@ const styles = StyleSheet.create({
   dayNumberCompact: {
     fontSize: 20,
     lineHeight: 24,
+  },
+  dayNumberTinted: {
+    // Soft light halo so dark numerals stay legible on saturated cells.
+    textShadowColor: 'rgba(255, 255, 255, 0.55)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
   },
   dayNumberOutsideMonth: {
     color: colors.text.secondary,
