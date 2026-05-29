@@ -120,17 +120,13 @@ export default function DayDetailModal({
       .filter((friend) =>
         isFriendInTown(visibility?.get(friend.id), statuses.get(friend.id))
       )
-      .map((friend) => ({ friend, status: 'In town' }));
-  }, [calendarEntries, date, visibleFriends, visibility]);
-    return friends
-      .filter((friend) => statuses.get(friend.id) !== 'out_of_town')
       .map((friend) => ({ friend, status: 'In town' }))
       .sort((a, b) => {
         const aName = a.friend.name || a.friend.email;
         const bName = b.friend.name || b.friend.email;
         return aName.localeCompare(bName);
       });
-  }, [calendarEntries, date, friends]);
+  }, [calendarEntries, date, visibleFriends, visibility]);
 
   if (!date) return null;
 
@@ -143,12 +139,11 @@ export default function DayDetailModal({
   const subtitle =
     totalFriends === 0
       ? 'No friends yet'
-      : `${inTownCount} of ${totalFriends} friend${totalFriends === 1 ? '' : 's'} in town`;
+      : `${inTownCount} of ${totalFriends} friend${totalFriends === 1 ? '' : 's'} in town${scopedLabel}`;
   const modalMaxHeight = Math.max(
     240,
     height - insets.top - insets.bottom - spacing[4] * 2
   );
-      : `${inTownCount} of ${totalFriends} friend${totalFriends === 1 ? '' : 's'} in town${scopedLabel}`;
 
   return (
     <Modal

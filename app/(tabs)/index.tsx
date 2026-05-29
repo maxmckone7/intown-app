@@ -1,20 +1,16 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  View,
-  StyleSheet,
-  ScrollView,
-  Text,
   Alert,
   Linking,
   Platform,
   ScrollView,
   StyleSheet,
+  Text,
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { format } from 'date-fns';
-import { useRouter } from 'expo-router';
 import { supabase } from '../../lib/supabase';
 import { authService } from '../../services/auth';
 import { calendarService } from '../../services/calendar';
@@ -47,10 +43,6 @@ import {
 } from '../../theme';
 
 const CONTENT_PADDING_BOTTOM = 24;
-
-export default function FriendsCalendarScreen() {
-  const router = useRouter();
-  const insets = useSafeAreaInsets();
 const HEATMAP_POLL_INTERVAL_MS = 10000;
 const REALTIME_REFRESH_DEBOUNCE_MS = 250;
 
@@ -98,6 +90,7 @@ function openEmail(recipients: string[], subject: string, body: string) {
 
 export default function FriendsCalendarScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{
     date?: string | string[];
     groupId?: string | string[];
@@ -107,25 +100,17 @@ export default function FriendsCalendarScreen() {
   const [userId, setUserId] = useState<string | null>(null);
   const [friends, setFriends] = useState<FriendWithStatus[]>([]);
   const [friendGroups, setFriendGroups] = useState<FriendGroup[]>([]);
-  const [friendEntries, setFriendEntries] = useState<
-    Array<CalendarEntry & { friend_name: string; friend_id: string }>
-  >([]);
   const [visibility, setVisibility] = useState<Map<string, VisibilityLevel>>(new Map());
   const [friendEntries, setFriendEntries] = useState<FriendCalendarEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [lastUpdatedAt, setLastUpdatedAt] = useState<Date | null>(null);
-  const [selectedDate, setSelectedDate] = useState<string | null>(null);
-  const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [selectedGroupId, setSelectedGroupId] = useState<string>('all');
   const [selectedDay, setSelectedDay] = useState<SelectedDay | null>(null);
   const [showAddFriendsPrompt, setShowAddFriendsPrompt] = useState(false);
   const [needsAvailabilitySetup, setNeedsAvailabilitySetup] = useState(false);
 
-  const loadUserAndFriends = useCallback(async () => {
-    setLoading(true);
-    setLoadError(null);
   const refreshFriendEntries = useCallback(
     async (
       currentUserId: string,
@@ -156,17 +141,6 @@ export default function FriendsCalendarScreen() {
     []
   );
 
-  const loadUserAndFriends = useCallback(async () => {
-  useEffect(() => {
-    if (routeDate && isIsoDate(routeDate)) {
-      setSelectedDate(routeDate);
-    }
-
-    if (routeGroupId) {
-      setSelectedGroupId(routeGroupId);
-    }
-  }, [routeDate, routeGroupId]);
-
   useEffect(() => {
     if (routeDate && isIsoDate(routeDate)) {
       setSelectedDay({ date: routeDate, groupId: routeGroupId || 'all' });
@@ -177,7 +151,9 @@ export default function FriendsCalendarScreen() {
     }
   }, [routeDate, routeGroupId]);
 
-  const loadUserAndFriends = async () => {
+  const loadUserAndFriends = useCallback(async () => {
+    setLoading(true);
+    setLoadError(null);
     try {
       const user = await authService.getCurrentUser();
       if (!user) {
@@ -191,34 +167,24 @@ export default function FriendsCalendarScreen() {
         friendsList,
         groupsList,
         entriesList,
+        visibilityMap,
         shouldShowPrompt,
         shouldSetAvailability,
       ] = await Promise.all([
         friendsService.getFriends(user.id),
         friendGroupsService.getGroups(user.id),
         calendarService.getFriendsEntries(user.id),
+        privacyService.getViewerVisibility(),
         addFriendsPromptService.shouldShow(user.id),
         addFriendsPromptService.shouldSetAvailability(user.id),
       ]);
       setFriends(friendsList);
       setFriendGroups(groupsList);
       setFriendEntries(entriesList);
-      setNeedsAvailabilitySetup(shouldSetAvailability);
-      setShowAddFriendsPrompt(!shouldSetAvailability && shouldShowPrompt);
-      const [friendsList, groupsList, entriesList, visibilityMap, shouldShowPrompt] =
-        await Promise.all([
-          friendsService.getFriends(user.id),
-          friendGroupsService.getGroups(user.id),
-          calendarService.getFriendsEntries(user.id),
-          privacyService.getViewerVisibility(),
-          addFriendsPromptService.shouldShow(user.id),
-        ]);
-      setFriends(friendsList);
-      setFriendGroups(groupsList);
-      setFriendEntries(entriesList);
       setVisibility(visibilityMap);
       setLastUpdatedAt(new Date());
-      setShowAddFriendsPrompt(shouldShowPrompt);
+      setNeedsAvailabilitySetup(shouldSetAvailability);
+      setShowAddFriendsPrompt(!shouldSetAvailability && shouldShowPrompt);
     } catch (error: any) {
       setLoadError(error.message || 'Failed to load your friends calendar');
     } finally {
@@ -470,7 +436,6 @@ export default function FriendsCalendarScreen() {
           getDayData={getDayData}
           lastUpdatedAt={lastUpdatedAt}
           isRefreshing={isRefreshing}
-          onDayPress={(iso) => setSelectedDate(iso)}
           onDayPress={(iso, groupId) => setSelectedDay({ date: iso, groupId })}
           onAddFriendsPress={handleAddFriendsPress}
           showEmptyStatePrompt={showAddFriendsPrompt}
@@ -489,7 +454,6 @@ export default function FriendsCalendarScreen() {
         groupLabel={selectedGroup?.label}
         calendarEntries={friendEntries}
         visibility={visibility}
-        onClose={() => setSelectedDate(null)}
         onClose={() => setSelectedDay(null)}
         onMessage={handleMessageFriend}
         onProposeHangout={handleProposeHangout}

@@ -1,4 +1,3 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Platform,
@@ -104,7 +103,6 @@ function showComingSoon(label: string) {
 export default function MyCalendar() {
   const today = useMemo(() => startOfToday(), []);
   const router = useRouter();
-  const today = startOfToday();
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const [viewMonth, setViewMonth] = useState<Date>(startOfMonth(today));
@@ -292,46 +290,6 @@ export default function MyCalendar() {
   useEffect(() => {
     void loadCalendar();
   }, [loadCalendar]);
-    let mounted = true;
-    (async () => {
-      try {
-        const user = await authService.getCurrentUser();
-        if (!user || !mounted) return;
-        const entries = await calendarService.getEntries(user.id);
-        if (!mounted) return;
-        const map: PersonalStatusMap = {};
-        for (const e of entries) {
-          map[e.date] = calendarStatusToDayStatus(e.status);
-        }
-        serverStatusByDateRef.current = map;
-        const optimisticMap = { ...map };
-        for (const [date, status] of Object.entries(
-          inFlightSaveByDateRef.current
-        )) {
-          if (status) optimisticMap[date] = status;
-        }
-        for (const [date, status] of Object.entries(
-          pendingSaveByDateRef.current
-        )) {
-          if (status) optimisticMap[date] = status;
-        }
-        replaceStatusMap(optimisticMap);
-        userIdRef.current = user.id;
-        setUserId(user.id);
-      } catch (err: any) {
-        if (mounted) {
-          toast.show(err?.message || 'Failed to load your calendar', {
-            variant: 'info',
-          });
-        }
-      }
-    })();
-    return () => {
-      mounted = false;
-    };
-    // toast is stable across renders via context; intentionally not in deps
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   useEffect(() => {
     if (userId) {
@@ -387,11 +345,6 @@ export default function MyCalendar() {
       };
     }
 
-  const statusFor = (iso: string): DayStatus =>
-    statusByDate[iso] ?? DEFAULT_DAY_STATUS;
-  const weekdayLabels = layout.compact
-    ? WEEKDAYS.map((day) => day.slice(0, 1))
-    : WEEKDAYS.map((day) => day.toUpperCase());
     if (states.includes('saved')) {
       return {
         text: 'All changes saved',
@@ -401,6 +354,10 @@ export default function MyCalendar() {
 
     return null;
   }, [saveStateByDate]);
+
+  const weekdayLabels = layout.compact
+    ? WEEKDAYS.map((day) => day.slice(0, 1))
+    : WEEKDAYS.map((day) => day.toUpperCase());
 
   const completeAvailabilityOnboarding = async () => {
     if (!userId) {
@@ -683,76 +640,6 @@ export default function MyCalendar() {
             <View style={{ width: layout.gridWidth }}>
               <View style={[styles.weekdayRow, { gap: layout.gap }]}>
                 {weekdayLabels.map((day, index) => (
-        <View style={styles.calendarFrame}>
-          <View style={styles.weekdayRow}>
-            {WEEKDAYS.map((day) => (
-              <Text key={day} style={styles.weekdayLabel}>
-                {day.toUpperCase()}
-              </Text>
-            ))}
-          </View>
-
-          <View style={styles.grid}>
-            {visibleDays.map((date) => {
-              const iso = ISO(date);
-              const inMonth = isSameMonth(date, viewMonth);
-              const todayCell = isSameDay(date, today);
-              const status = statusFor(iso);
-              const saveState = saveStateByDate[iso];
-              const bg =
-                status === 'in_town' ? colors.heatmap.high : colors.heatmap.low;
-              const dayNumber = format(date, 'd');
-              const statusLabel = status === 'in_town' ? 'In Town' : 'Away';
-              const saveLabel =
-                saveState === 'saving'
-                  ? 'Saving...'
-                  : saveState === 'saved'
-                    ? 'Saved'
-                    : saveState === 'error'
-                      ? 'Not saved'
-                      : null;
-
-              return (
-                <Pressable
-                  key={iso}
-                  onPress={() => toggleDay(iso)}
-                  accessibilityRole="button"
-                  accessibilityLabel={`${format(date, 'EEEE, MMM d')} — ${statusLabel}${
-                    saveLabel ? ` — ${saveLabel}` : ''
-                  }`}
-                  accessibilityHint="Tap to toggle in town or away"
-                  style={({ pressed, hovered }: any) => [
-                    styles.cell,
-                    { backgroundColor: bg },
-                    !inMonth && styles.cellOutsideMonth,
-                    todayCell && styles.cellToday,
-                    saveState === 'saving' && styles.cellSaving,
-                    saveState === 'error' && styles.cellSaveError,
-                    hovered && styles.cellHover,
-                    pressed && styles.cellPressed,
-                  ]}
-                >
-                  <View style={styles.cellInnerStroke} pointerEvents="none" />
-                  {saveLabel && (
-                    <View
-                      pointerEvents="none"
-                      style={[
-                        styles.saveBadge,
-                        saveState === 'saved' && styles.saveBadgeSaved,
-                        saveState === 'error' && styles.saveBadgeError,
-                      ]}
-                    >
-                      <Text
-                        style={[
-                          styles.saveBadgeText,
-                          saveState === 'error' && styles.saveBadgeTextError,
-                        ]}
-                        numberOfLines={1}
-                      >
-                        {saveLabel}
-                      </Text>
-                    </View>
-                  )}
                   <Text
                     key={`${day}-${index}`}
                     style={[
@@ -1195,6 +1082,7 @@ const styles = StyleSheet.create({
   },
   statusLabelOutsideMonth: {
     color: colors.text.secondary,
+  },
   saveBadge: {
     position: 'absolute',
     top: spacing[2],

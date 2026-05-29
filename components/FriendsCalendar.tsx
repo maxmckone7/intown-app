@@ -45,7 +45,6 @@ type Props = {
   getDayData?: (isoDate: string, groupId: string) => HeatmapDayData;
   lastUpdatedAt?: Date | null;
   isRefreshing?: boolean;
-  onDayPress?: (isoDate: string) => void;
   onDayPress?: (isoDate: string, groupId: string) => void;
   onAddFriendsPress?: () => void;
   showEmptyStatePrompt?: boolean;
@@ -115,13 +114,6 @@ export default function FriendsCalendar({
 
   const handleDayPress = (iso: string) => {
     onDayPress?.(iso, activeGroupId);
-  };
-
-  const handleGroupSelect = (groupId: string) => {
-    if (selectedGroupId === undefined) {
-      setInternalSelectedGroupId(groupId);
-    }
-    onSelectGroup?.(groupId);
   };
 
   const handleGroupSelect = (groupId: string) => {
@@ -219,41 +211,6 @@ export default function FriendsCalendar({
             <View style={{ width: layout.gridWidth }}>
               <View style={[styles.weekdayRow, { gap: layout.gap }]}>
                 {weekdayLabels.map((day, index) => (
-        <View style={styles.calendarFrame}>
-          <View style={styles.weekdayRow}>
-            {WEEKDAYS.map((day) => (
-              <Text key={day} style={styles.weekdayLabel}>
-                {day.toUpperCase()}
-              </Text>
-            ))}
-          </View>
-
-          <View style={styles.grid}>
-            {visibleDays.map((date) => {
-              const iso = ISO(date);
-              const inMonth = isSameMonth(date, viewMonth);
-              const todayCell = isSameDay(date, today);
-              const data = getDayData
-                ? getDayData(iso, activeGroupId)
-                : { date: iso, friendsInTown: 0, totalFriends: selectedTotalFriends };
-              const bg = getHeatmapColor(data.friendsInTown, data.totalFriends);
-              const dayNumber = format(date, 'd');
-
-              return (
-                <Pressable
-                  key={iso}
-                  onPress={() => handleDayPress(iso)}
-                  accessibilityRole="button"
-                  accessibilityLabel={`${format(date, 'EEEE, MMM d')} — ${data.friendsInTown} in town`}
-                  accessibilityHint="Tap to see which friends are in town"
-                  style={({ pressed, hovered }: any) => [
-                    styles.cell,
-                    { backgroundColor: bg },
-                    !inMonth && styles.cellOutsideMonth,
-                    todayCell && styles.cellToday,
-                    (pressed || hovered) && styles.cellHover,
-                  ]}
-                >
                   <Text
                     key={`${day}-${index}`}
                     style={[
@@ -273,7 +230,7 @@ export default function FriendsCalendar({
                   const inMonth = isSameMonth(date, viewMonth);
                   const todayCell = isSameDay(date, today);
                   const data = getDayData
-                    ? getDayData(iso, selectedGroupId)
+                    ? getDayData(iso, activeGroupId)
                     : { date: iso, friendsInTown: 0, totalFriends: selectedTotalFriends };
                   const bg = getHeatmapColor(data.friendsInTown, data.totalFriends);
                   const dayNumber = format(date, 'd');
