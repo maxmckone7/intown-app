@@ -6,7 +6,9 @@ import {
   StyleSheet,
   Text,
   View,
+  useWindowDimensions,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   addMonths,
   eachDayOfInterval,
@@ -32,6 +34,7 @@ import { useToast } from './ToastProvider';
 import { authService } from '../services/auth';
 import { calendarService } from '../services/calendar';
 import { CalendarStatus } from '../lib/types';
+import { getCalendarLayout } from './calendarLayout';
 
 type DayStatus = 'in_town' | 'away';
 type PersonalStatusMap = Record<string, DayStatus>;
@@ -55,10 +58,16 @@ function showComingSoon(label: string) {
 
 export default function MyCalendar() {
   const today = startOfToday();
+  const { width } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
   const [viewMonth, setViewMonth] = useState<Date>(startOfMonth(today));
   const [statusByDate, setStatusByDate] = useState<PersonalStatusMap>({});
   const [userId, setUserId] = useState<string | null>(null);
   const toast = useToast();
+  const layout = useMemo(
+    () => getCalendarLayout(width, { left: insets.left, right: insets.right }),
+    [insets.left, insets.right, width]
+  );
 
   // Load the user's existing entries from Supabase on mount so toggles
   // persist across navigation and page reloads (ENG-84).
@@ -135,17 +144,31 @@ export default function MyCalendar() {
 
   const statusFor = (iso: string): DayStatus =>
     statusByDate[iso] ?? DEFAULT_DAY_STATUS;
+  const weekdayLabels = layout.compact
+    ? WEEKDAYS.map((day) => day.slice(0, 1))
+    : WEEKDAYS.map((day) => day.toUpperCase());
 
   return (
     <ScrollView
       style={styles.outer}
-      contentContainerStyle={styles.outerContent}
+      contentContainerStyle={[
+        styles.outerContent,
+        {
+          paddingTop: layout.compact ? spacing[4] : spacing[7],
+          paddingBottom: spacing[8] + insets.bottom,
+          paddingLeft: layout.paddingLeft,
+          paddingRight: layout.paddingRight,
+        },
+      ]}
+      contentInsetAdjustmentBehavior="automatic"
     >
       <View style={styles.inner}>
         <View style={styles.titleBlock}>
-          <Text style={styles.pageTitle}>My Calendar</Text>
+          <Text style={[styles.pageTitle, layout.compact && styles.pageTitleCompact]}>
+            My Calendar
+          </Text>
           <Text style={styles.pageSubtitle}>
-            Click any day to toggle your status
+            Tap any day to toggle your status
           </Text>
         </View>
 
@@ -153,6 +176,7 @@ export default function MyCalendar() {
           <View style={styles.bulkRow}>
             <Pressable
               onPress={() => showComingSoon('Mark week as in town')}
+              accessibilityRole="button"
               style={({ pressed, hovered }: any) => [
                 styles.bulkButton,
                 styles.bulkInTown,
@@ -165,6 +189,7 @@ export default function MyCalendar() {
             </Pressable>
             <Pressable
               onPress={() => showComingSoon('Mark week as away')}
+              accessibilityRole="button"
               style={({ pressed, hovered }: any) => [
                 styles.bulkButton,
                 styles.bulkAway,
@@ -178,6 +203,8 @@ export default function MyCalendar() {
           </View>
           <Pressable
             onPress={goToday}
+            accessibilityRole="button"
+            accessibilityLabel="Go to current month"
             style={({ pressed, hovered }: any) => [
               styles.todayPill,
               (pressed || hovered) && styles.todayPillHover,
@@ -199,7 +226,12 @@ export default function MyCalendar() {
           >
             <Text style={styles.monthArrowGlyph}>‹</Text>
           </Pressable>
-          <Text style={styles.monthLabel}>{format(viewMonth, 'MMMM yyyy')}</Text>
+          <Text
+            style={[styles.monthLabel, layout.compact && styles.monthLabelCompact]}
+            numberOfLines={1}
+          >
+            {format(viewMonth, 'MMMM yyyy')}
+          </Text>
           <Pressable
             onPress={goNext}
             accessibilityRole="button"
@@ -213,66 +245,102 @@ export default function MyCalendar() {
           </Pressable>
         </View>
 
-        <View style={styles.calendarFrame}>
-          <View style={styles.weekdayRow}>
-            {WEEKDAYS.map((day) => (
-              <Text key={day} style={styles.weekdayLabel}>
-                {day.toUpperCase()}
-              </Text>
-            ))}
-          </View>
-
-          <View style={styles.grid}>
-            {visibleDays.map((date) => {
-              const iso = ISO(date);
-              const inMonth = isSameMonth(date, viewMonth);
-              const todayCell = isSameDay(date, today);
-              const status = statusFor(iso);
-              const bg =
-                status === 'in_town' ? colors.heatmap.high : colors.heatmap.low;
-              const dayNumber = format(date, 'd');
-              const statusLabel = status === 'in_town' ? 'In Town' : 'Away';
-
-              return (
-                <Pressable
-                  key={iso}
-                  onPress={() => toggleDay(iso)}
-                  accessibilityRole="button"
-                  accessibilityLabel={`${format(date, 'EEEE, MMM d')} — ${statusLabel}`}
-                  accessibilityHint="Tap to toggle in town or away"
-                  style={({ pressed, hovered }: any) => [
-                    styles.cell,
-                    { backgroundColor: bg },
-                    !inMonth && styles.cellOutsideMonth,
-                    todayCell && styles.cellToday,
-                    hovered && styles.cellHover,
-                    pressed && styles.cellPressed,
-                  ]}
-                >
-                  <View style={styles.cellInnerStroke} pointerEvents="none" />
+        <View style={[styles.calendarFrame, { padding: layout.framePadding }]}>
+          <ScrollView
+            horizontal
+            bounces={false}
+            scrollEnabled={layout.isScrollable}
+            showsHorizontalScrollIndicator={layout.isScrollable}
+          >
+            <View style={{ width: layout.gridWidth }}>
+              <View style={[styles.weekdayRow, { gap: layout.gap }]}>
+                {weekdayLabels.map((day, index) => (
                   <Text
+                    key={`${day}-${index}`}
                     style={[
-                      styles.dayNumber,
-                      !inMonth && styles.dayNumberOutsideMonth,
+                      styles.weekdayLabel,
+                      layout.compact && styles.weekdayLabelCompact,
+                      { width: layout.cellWidth },
                     ]}
                   >
-                    {dayNumber}
+                    {day}
                   </Text>
-                  <Text style={styles.statusLabel} numberOfLines={1}>
-                    {statusLabel}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
+                ))}
+              </View>
+
+              <View style={[styles.grid, { gap: layout.gap }]}>
+                {visibleDays.map((date) => {
+                  const iso = ISO(date);
+                  const inMonth = isSameMonth(date, viewMonth);
+                  const todayCell = isSameDay(date, today);
+                  const status = statusFor(iso);
+                  const bg =
+                    status === 'in_town' ? colors.heatmap.high : colors.heatmap.low;
+                  const dayNumber = format(date, 'd');
+                  const fullStatusLabel = status === 'in_town' ? 'In Town' : 'Away';
+                  const statusLabel =
+                    layout.compact && status === 'in_town' ? 'In' : fullStatusLabel;
+
+                  return (
+                    <Pressable
+                      key={iso}
+                      onPress={() => toggleDay(iso)}
+                      accessibilityRole="button"
+                      accessibilityLabel={`${format(date, 'EEEE, MMM d')} - ${fullStatusLabel}`}
+                      accessibilityHint="Tap to toggle in town or away"
+                      hitSlop={layout.compact ? 0 : 4}
+                      style={({ pressed, hovered }: any) => [
+                        styles.cell,
+                        {
+                          backgroundColor: bg,
+                          borderRadius: layout.compact ? radius.sm : radius.md,
+                          height: layout.cellHeight,
+                          padding: layout.compact ? spacing[1] : spacing[2],
+                          width: layout.cellWidth,
+                        },
+                        !inMonth && styles.cellOutsideMonth,
+                        todayCell && styles.cellToday,
+                        hovered && styles.cellHover,
+                        pressed && styles.cellPressed,
+                      ]}
+                    >
+                      <View
+                        style={[
+                          styles.cellInnerStroke,
+                          { borderRadius: (layout.compact ? radius.sm : radius.md) - 2 },
+                        ]}
+                        pointerEvents="none"
+                      />
+                      <Text
+                        style={[
+                          styles.dayNumber,
+                          layout.compact && styles.dayNumberCompact,
+                          !inMonth && styles.dayNumberOutsideMonth,
+                        ]}
+                      >
+                        {dayNumber}
+                      </Text>
+                      <Text
+                        style={[
+                          styles.statusLabel,
+                          layout.compact && styles.statusLabelCompact,
+                          !inMonth && styles.statusLabelOutsideMonth,
+                        ]}
+                        numberOfLines={1}
+                      >
+                        {statusLabel}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </View>
+          </ScrollView>
         </View>
       </View>
     </ScrollView>
   );
 }
-
-const CELL_HEIGHT = 100;
-const CELL_GAP = spacing[2];
 
 const styles = StyleSheet.create({
   outer: {
@@ -280,9 +348,6 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background.primary,
   },
   outerContent: {
-    paddingTop: spacing[7],
-    paddingBottom: spacing[8],
-    paddingHorizontal: spacing[4],
     alignItems: 'center',
   },
   inner: {
@@ -298,6 +363,10 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: colors.text.primary,
     marginBottom: 4,
+  },
+  pageTitleCompact: {
+    fontSize: typography.display.medium.fontSize,
+    lineHeight: typography.display.medium.lineHeight,
   },
   pageSubtitle: {
     fontFamily: fontFamilies.inter.regular,
@@ -319,7 +388,7 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
   },
   bulkButton: {
-    height: 36,
+    minHeight: 44,
     paddingHorizontal: spacing[4],
     paddingVertical: spacing[2],
     borderRadius: radius.full,
@@ -354,6 +423,7 @@ const styles = StyleSheet.create({
     letterSpacing: typography.label.letterSpacing,
   },
   todayPill: {
+    minHeight: 44,
     paddingHorizontal: spacing[3],
     paddingVertical: spacing[2],
     borderRadius: radius.full,
@@ -379,8 +449,8 @@ const styles = StyleSheet.create({
     marginBottom: spacing[5],
   },
   monthArrow: {
-    width: 48,
-    height: 48,
+    width: 44,
+    height: 44,
     borderRadius: radius.full,
     alignItems: 'center',
     justifyContent: 'center',
@@ -396,43 +466,44 @@ const styles = StyleSheet.create({
   },
   monthLabel: {
     ...typography.calendar.month,
+    flexShrink: 1,
     color: colors.text.primary,
-    minWidth: 280,
+    minWidth: 0,
     textAlign: 'center',
+  },
+  monthLabelCompact: {
+    fontSize: typography.display.small.fontSize,
+    lineHeight: typography.display.small.lineHeight,
   },
   calendarFrame: {
     backgroundColor: colors.background.card,
     borderWidth: 1,
     borderColor: colors.border.subtle,
     borderRadius: radius.lg,
-    padding: spacing[3],
     ...shadows.sm,
   },
   weekdayRow: {
     flexDirection: 'row',
     marginBottom: spacing[3],
-    gap: CELL_GAP,
   },
   weekdayLabel: {
-    flex: 1,
     ...typography.calendar.weekday,
     color: colors.text.tertiary,
     textAlign: 'center',
   },
+  weekdayLabelCompact: {
+    fontSize: typography.caption.fontSize,
+    letterSpacing: 0.6,
+    lineHeight: typography.caption.lineHeight,
+  },
   grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: CELL_GAP,
   },
   cell: {
-    flexGrow: 0,
-    flexShrink: 1,
-    flexBasis: `${(100 - 6) / 7}%`,
-    height: CELL_HEIGHT,
     borderRadius: radius.md,
     borderWidth: 1,
     borderColor: colors.border.subtle,
-    padding: spacing[2],
     justifyContent: 'space-between',
     position: 'relative',
     overflow: 'hidden',
@@ -466,6 +537,10 @@ const styles = StyleSheet.create({
     ...typography.calendar.dayNumber,
     color: colors.text.primary,
   },
+  dayNumberCompact: {
+    fontSize: 20,
+    lineHeight: 24,
+  },
   dayNumberOutsideMonth: {
     color: colors.text.secondary,
   },
@@ -473,5 +548,13 @@ const styles = StyleSheet.create({
     ...typography.calendar.meta,
     color: 'rgba(255, 255, 255, 0.9)',
     alignSelf: 'flex-end',
+  },
+  statusLabelCompact: {
+    fontSize: 9,
+    letterSpacing: 0.3,
+    lineHeight: 12,
+  },
+  statusLabelOutsideMonth: {
+    color: colors.text.secondary,
   },
 });

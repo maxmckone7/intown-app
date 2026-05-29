@@ -10,7 +10,9 @@ import {
   StyleSheet,
   Text,
   View,
+  useWindowDimensions,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { format } from 'date-fns';
 import {
   colors,
@@ -49,6 +51,8 @@ export default function DayDetailModal({
   const opacity = useRef(new Animated.Value(0)).current;
   const translateY = useRef(new Animated.Value(30)).current;
   const reducedMotion = useReducedMotion();
+  const insets = useSafeAreaInsets();
+  const { height } = useWindowDimensions();
 
   useEffect(() => {
     if (visible) {
@@ -112,6 +116,10 @@ export default function DayDetailModal({
     totalFriends === 0
       ? 'No friends yet'
       : `${inTownCount} of ${totalFriends} friend${totalFriends === 1 ? '' : 's'} in town`;
+  const modalMaxHeight = Math.max(
+    240,
+    height - insets.top - insets.bottom - spacing[4] * 2
+  );
 
   return (
     <Modal
@@ -122,7 +130,15 @@ export default function DayDetailModal({
       statusBarTranslucent
     >
       <Pressable
-        style={styles.backdrop}
+        style={[
+          styles.backdrop,
+          {
+            paddingTop: spacing[4] + insets.top,
+            paddingBottom: spacing[4] + insets.bottom,
+            paddingLeft: spacing[4] + insets.left,
+            paddingRight: spacing[4] + insets.right,
+          },
+        ]}
         onPress={onClose}
         accessibilityLabel="Close day details"
       >
@@ -130,6 +146,7 @@ export default function DayDetailModal({
         <Animated.View
           style={[
             styles.card,
+            { maxHeight: modalMaxHeight },
             { opacity, transform: [{ translateY }] },
           ]}
           // Stop the inner press from bubbling to the backdrop
@@ -229,7 +246,6 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    padding: spacing[4],
   },
   backdropFade: {
     ...StyleSheet.absoluteFillObject,
@@ -238,7 +254,6 @@ const styles = StyleSheet.create({
   card: {
     width: '100%',
     maxWidth: 480,
-    maxHeight: 600,
     backgroundColor: colors.background.card,
     borderRadius: radius.lg,
     padding: spacing[6],
@@ -267,8 +282,8 @@ const styles = StyleSheet.create({
     color: colors.text.secondary,
   },
   closeButton: {
-    width: 32,
-    height: 32,
+    width: 44,
+    height: 44,
     borderRadius: radius.full,
     alignItems: 'center',
     justifyContent: 'center',
@@ -355,6 +370,7 @@ const styles = StyleSheet.create({
     color: colors.text.secondary,
   },
   messageButton: {
+    minHeight: 44,
     paddingHorizontal: spacing[3],
     paddingVertical: spacing[2],
     borderRadius: radius.sm,

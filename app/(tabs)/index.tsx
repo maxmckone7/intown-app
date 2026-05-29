@@ -5,6 +5,7 @@ import {
   Alert,
   ScrollView,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { authService } from '../../services/auth';
 import { calendarService } from '../../services/calendar';
@@ -24,8 +25,11 @@ import DayDetailModal from '../../components/DayDetailModal';
 import { CalendarSkeleton } from '../../components/Skeleton';
 import { colors } from '../../theme';
 
+const CONTENT_PADDING_BOTTOM = 24;
+
 export default function FriendsCalendarScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const [userId, setUserId] = useState<string | null>(null);
   const [friends, setFriends] = useState<FriendWithStatus[]>([]);
   const [friendGroups, setFriendGroups] = useState<FriendGroup[]>([]);
@@ -135,7 +139,11 @@ export default function FriendsCalendarScreen() {
     <>
       <ScrollView
         style={styles.container}
-        contentContainerStyle={styles.content}
+        contentContainerStyle={[
+          styles.content,
+          { paddingBottom: CONTENT_PADDING_BOTTOM + insets.bottom },
+        ]}
+        contentInsetAdjustmentBehavior="automatic"
       >
         <FriendsCalendar
           totalFriends={friends.length}
@@ -167,7 +175,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background.primary,
   },
   content: {
-    paddingBottom: 24,
+    paddingBottom: CONTENT_PADDING_BOTTOM,
   },
   centerContainer: {
     flex: 1,
