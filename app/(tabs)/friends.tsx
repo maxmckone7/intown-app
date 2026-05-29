@@ -85,19 +85,14 @@ export default function FriendsScreen() {
         return;
       }
       const today = format(new Date(), 'yyyy-MM-dd');
-      const [list, entries, shouldSetAvailability] = await Promise.all([
+      const [list, entries, shouldSetAvailability, visibilityMap] = await Promise.all([
         friendsService.getFriends(user.id),
         calendarService.getFriendsEntries(user.id, today, today),
         addFriendsPromptService.shouldSetAvailability(user.id),
-      ]);
-      setFriends(list);
-      setNeedsAvailabilitySetup(shouldSetAvailability);
-      const [list, entries, visibilityMap] = await Promise.all([
-        friendsService.getFriends(user.id),
-        calendarService.getFriendsEntries(user.id, today, today),
         privacyService.getViewerVisibility(),
       ]);
       setFriends(list);
+      setNeedsAvailabilitySetup(shouldSetAvailability);
       setVisibility(visibilityMap);
       setTodayStatuses(
         entries.reduce<Record<string, CalendarStatus>>((statuses, entry) => {
