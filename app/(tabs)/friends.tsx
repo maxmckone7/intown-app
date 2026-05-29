@@ -14,7 +14,9 @@ import { format } from 'date-fns';
 import { authService } from '../../services/auth';
 import { calendarService } from '../../services/calendar';
 import { friendsService } from '../../services/friends';
-import { CalendarStatus, FriendWithStatus } from '../../lib/types';
+import { privacyService } from '../../services/privacy';
+import { CalendarStatus, FriendWithStatus, VisibilityLevel } from '../../lib/types';
+import { isFriendInTown, isFriendVisible } from '../../lib/heatmap';
 import Button from '../../components/Button';
 import AddFriendModal from '../../components/AddFriendModal';
 import InviteFriends from '../../components/InviteFriends';
@@ -27,7 +29,7 @@ import {
   typography,
 } from '../../theme';
 
-type FriendStatusState = 'in_town' | 'away';
+type FriendStatusState = 'in_town' | 'away' | 'unknown';
 
 type FriendStatus = {
   state: FriendStatusState;
@@ -38,11 +40,31 @@ type FriendStatus = {
 const STATUS_COLORS: Record<FriendStatusState, { text: string; bg: string }> = {
   in_town: { text: '#4D6A50', bg: 'rgba(134, 167, 137, 0.2)' },
   away: { text: '#8A3B32', bg: 'rgba(196, 90, 77, 0.18)' },
+  unknown: { text: colors.text.tertiary, bg: 'rgba(120, 113, 108, 0.12)' },
+};
+
+const buildStatus = (
+  level: VisibilityLevel | undefined,
+  status: CalendarStatus | undefined
+): FriendStatus => {
+  // Friend has hidden their calendar from you.
+  if (!isFriendVisible(level)) {
+    return { state: 'unknown', label: 'Availability hidden', pillLabel: 'Hidden' };
+  }
+  if (isFriendInTown(level, status)) {
+    return { state: 'in_town', label: 'In town today', pillLabel: 'In Town' };
+  }
+  // Limited friends don't share their away days, so we can't claim they're away.
+  if (level === 'limited') {
+    return { state: 'unknown', label: 'No status shared', pillLabel: 'Private' };
+  }
+  return { state: 'away', label: 'Away today', pillLabel: 'Away' };
 };
 
 export default function FriendsScreen() {
   const [friends, setFriends] = useState<FriendWithStatus[]>([]);
   const [todayStatuses, setTodayStatuses] = useState<Record<string, CalendarStatus>>({});
+  const [visibility, setVisibility] = useState<Map<string, VisibilityLevel>>(new Map());
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchFocused, setSearchFocused] = useState(false);
@@ -60,11 +82,13 @@ export default function FriendsScreen() {
         return;
       }
       const today = format(new Date(), 'yyyy-MM-dd');
-      const [list, entries] = await Promise.all([
+      const [list, entries, visibilityMap] = await Promise.all([
         friendsService.getFriends(user.id),
         calendarService.getFriendsEntries(user.id, today, today),
+        privacyService.getViewerVisibility(),
       ]);
       setFriends(list);
+      setVisibility(visibilityMap);
       setTodayStatuses(
         entries.reduce<Record<string, CalendarStatus>>((statuses, entry) => {
           statuses[entry.user_id] = entry.status;
@@ -80,19 +104,11 @@ export default function FriendsScreen() {
 
   const friendsWithStatus = useMemo(
     () =>
-      friends.map((friend) => {
-        const status = todayStatuses[friend.id];
-        const isAway = status === 'out_of_town';
-        return {
-          friend,
-          status: {
-            state: isAway ? 'away' : 'in_town',
-            label: isAway ? 'Away today' : 'In town today',
-            pillLabel: isAway ? 'Away' : 'In Town',
-          } satisfies FriendStatus,
-        };
-      }),
-    [friends, todayStatuses]
+      friends.map((friend) => ({
+        friend,
+        status: buildStatus(visibility.get(friend.id), todayStatuses[friend.id]),
+      })),
+    [friends, todayStatuses, visibility]
   );
 
   const inTownThisWeek = useMemo(
