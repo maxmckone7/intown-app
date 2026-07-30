@@ -91,6 +91,19 @@ const completeOAuthSignIn = async (provider: 'google' | 'apple') => {
 
   if (error) throw error;
 
+  // The dev/mock Supabase client does not perform a real OAuth redirect; it
+  // returns a ready-made session directly (with no `url`). Skip the browser
+  // and code-exchange steps in that case and use the session as-is.
+  if (data?.session) {
+    const user = data.user ?? data.session.user;
+    await ensureUserProfile(user);
+    return {
+      session: data.session,
+      user,
+      isNewUser: data.isNewUser ?? isLikelyNewAuthUser(user),
+    };
+  }
+
   if (!data?.url) {
     throw new Error(`${provider} sign-in did not return an OAuth URL.`);
   }
