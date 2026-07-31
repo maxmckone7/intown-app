@@ -258,6 +258,48 @@ class MockSupabaseClient {
     return new MockQueryBuilder(table, this);
   }
 
+  // Postgres RPC mock. Mirrors the SQL functions the app calls (see
+  // database/*.sql) against the AsyncStorage-backed tables so dev mode works
+  // without a real database. Returns the same { data, error } shape callers
+  // `await` on the real client.
+  async rpc(fnName: string, params?: any): Promise<{ data: any; error: any }> {
+    switch (fnName) {
+      case 'my_friends_visibility': {
+        // SQL: each accepted friend of the current user + the visibility they
+        // grant toward the viewer. The mock has no rule engine, so every
+        // visible friend defaults to 'full' (matches the schema default).
+        const session = await this.getStoredData('auth_session');
+        const viewerId = session?.user?.id;
+        if (!viewerId) {
+          return { data: [], error: null };
+        }
+
+        const friendships = (await this.getStoredData('friendships')) || [];
+        const rows = friendships
+          .filter((f: any) => f.user_id === viewerId && f.status === 'accepted')
+          .map((f: any) => ({ friend_id: f.friend_id, level: 'full' }));
+        return { data: rows, error: null };
+      }
+
+      case 'accept_invite': {
+        // SQL: look up the invite by token, mark it accepted, and return the
+        // invite row. Friendship creation is out of scope for the mock.
+        const invites = (await this.getStoredData('invites')) || [];
+        const invite = invites.find((i: any) => i.token === params?.invite_token);
+        if (!invite) {
+          return { data: null, error: { message: 'Invite not found.' } };
+        }
+        return { data: invite, error: null };
+      }
+
+      default:
+        console.warn(
+          `[MockSupabase] Unhandled rpc("${fnName}") — returning empty result.`,
+        );
+        return { data: null, error: null };
+    }
+  }
+
   // Helper methods for AsyncStorage
   private async getStoredData(key: string): Promise<any> {
     try {
