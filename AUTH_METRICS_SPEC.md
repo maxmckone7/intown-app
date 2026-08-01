@@ -235,8 +235,12 @@ from being *evaluated* (not from being *collected*).
   sign up? Determines whether M1's completion point is a verified session or the
   initial submit. *(PRD open question.)*
 - **O5 — Session expiry/refresh behavior.** The expected refresh cadence and
-  expiry rules that define which losses are "unexpected" for M3. *(PRD open
-  question: "What session expiration and refresh behavior is expected?")*
+  expiry rules that define which losses are "unexpected" for M3. The lifecycle is
+  now defined end to end in `SESSION_HANDLING_SPEC.md` (PRA-14) — including the
+  "no explicit sign-out preceded it" definition M3 relies on; what stays open
+  there (token TTLs of record, the deliberate-vs-unexpected marker) is what still
+  gates M3's evaluation. *(PRD open question: "What session expiration and refresh
+  behavior is expected?")*
 - **O6 — Auth methods in scope.** Required methods / whether social login/SSO
   count; decides which `method` breakdowns M1–M2 must report. *(PRD open
   questions on auth methods and social login/SSO.)*
