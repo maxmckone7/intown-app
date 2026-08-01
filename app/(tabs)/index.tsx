@@ -330,21 +330,6 @@ export default function FriendsCalendarScreen() {
       // defaults to "in town" and inflates the count, making the heat map cell
       // disagree with the day-detail list (which already intersects membership
       // with `friends`).
-      const friendIdSet = new Set(allFriendIds);
-      const groupFriendIds =
-        groupId === 'all'
-          ? allFriendIds
-          : (groups.find((group) => group.id === groupId)?.friendIds ?? []).filter(
-              (friendId) => friendIdSet.has(friendId)
-            );
-      // Friends who hid their calendar (or are appearing away) drop out of the
-      // count entirely; the rest are counted per their shared visibility level.
-      const visibleFriendIds = groupFriendIds.filter((friendId) =>
-        isFriendVisible(visibility.get(friendId))
-      // Resolve which friends the density counts. Passing null for the "all"
-      // selection means no group scoping; any real group is intersected with
-      // the current friend set to drop stale members (see scopeFriendIds /
-      // PRA-25). A missing group id scopes to nobody rather than everyone.
       const groupFriendIds =
         groupId === 'all'
           ? null
