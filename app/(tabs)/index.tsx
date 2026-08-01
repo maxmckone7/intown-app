@@ -27,7 +27,7 @@ import {
   FriendWithStatus,
   VisibilityLevel,
 } from '../../lib/types';
-import { isFriendInTown, isFriendVisible } from '../../lib/heatmap';
+import { aggregateDayDensity, scopeFriendIds } from '../../lib/heatmap';
 import InviteFriends from '../../components/InviteFriends';
 import FriendsCalendar from '../../components/FriendsCalendar';
 import HeatmapCalendar from '../../components/HeatmapCalendar';
@@ -341,17 +341,22 @@ export default function FriendsCalendarScreen() {
       // count entirely; the rest are counted per their shared visibility level.
       const visibleFriendIds = groupFriendIds.filter((friendId) =>
         isFriendVisible(visibility.get(friendId))
-      );
-      const dayStatuses = statusesByDate.get(isoDate);
-      const friendsInTown = visibleFriendIds.filter((friendId) =>
-        isFriendInTown(visibility.get(friendId), dayStatuses?.get(friendId))
-      ).length;
+      // Resolve which friends the density counts. Passing null for the "all"
+      // selection means no group scoping; any real group is intersected with
+      // the current friend set to drop stale members (see scopeFriendIds /
+      // PRA-25). A missing group id scopes to nobody rather than everyone.
+      const groupFriendIds =
+        groupId === 'all'
+          ? null
+          : groups.find((group) => group.id === groupId)?.friendIds ?? [];
+      const scopedFriendIds = scopeFriendIds(allFriendIds, groupFriendIds);
 
-      return {
-        date: isoDate,
-        friendsInTown,
-        totalFriends: visibleFriendIds.length,
-      };
+      return aggregateDayDensity(
+        isoDate,
+        scopedFriendIds,
+        visibility,
+        statusesByDate.get(isoDate)
+      );
     },
     [allFriendIds, groups, statusesByDate, visibility]
   );
