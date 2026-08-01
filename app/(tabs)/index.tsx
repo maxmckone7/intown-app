@@ -3,10 +3,12 @@ import {
   Alert,
   Linking,
   Platform,
+  Pressable,
   ScrollView,
   StyleSheet,
   Text,
   View,
+  useWindowDimensions,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -25,9 +27,10 @@ import {
   FriendWithStatus,
   VisibilityLevel,
 } from '../../lib/types';
-import { isFriendInTown, isFriendVisible } from '../../lib/heatmap';
+import { aggregateDayDensity, scopeFriendIds } from '../../lib/heatmap';
 import InviteFriends from '../../components/InviteFriends';
 import FriendsCalendar from '../../components/FriendsCalendar';
+import HeatmapCalendar from '../../components/HeatmapCalendar';
 import { FilterGroup } from '../../components/GroupFilter';
 import DayDetailModal from '../../components/DayDetailModal';
 import { CalendarSkeleton, InviteCardSkeleton } from '../../components/Skeleton';
@@ -60,6 +63,13 @@ type SelectedDay = {
   groupId: string;
 };
 
+type CalendarViewMode = 'month' | 'heatmap';
+
+const VIEW_MODES: { id: CalendarViewMode; label: string }[] = [
+  { id: 'month', label: 'Month' },
+  { id: 'heatmap', label: 'Heat map' },
+];
+
 function showAlert(title: string, message: string) {
   if (Platform.OS === 'web' && typeof window !== 'undefined' && window.alert) {
     window.alert(`${title}\n\n${message}`);
@@ -91,6 +101,8 @@ function openEmail(recipients: string[], subject: string, body: string) {
 export default function FriendsCalendarScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
+  const isCompact = width < 480;
   const params = useLocalSearchParams<{
     date?: string | string[];
     groupId?: string | string[];
@@ -107,6 +119,7 @@ export default function FriendsCalendarScreen() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [lastUpdatedAt, setLastUpdatedAt] = useState<Date | null>(null);
   const [selectedGroupId, setSelectedGroupId] = useState<string>('all');
+  const [viewMode, setViewMode] = useState<CalendarViewMode>('month');
   const [selectedDay, setSelectedDay] = useState<SelectedDay | null>(null);
   const [showAddFriendsPrompt, setShowAddFriendsPrompt] = useState(false);
   const [needsAvailabilitySetup, setNeedsAvailabilitySetup] = useState(false);
@@ -309,25 +322,22 @@ export default function FriendsCalendarScreen() {
 
   const getDayData = useCallback(
     (isoDate: string, groupId: string) => {
+      // Resolve which friends the density counts. Passing null for the "all"
+      // selection means no group scoping; any real group is intersected with
+      // the current friend set to drop stale members (see scopeFriendIds /
+      // PRA-25). A missing group id scopes to nobody rather than everyone.
       const groupFriendIds =
         groupId === 'all'
-          ? allFriendIds
+          ? null
           : groups.find((group) => group.id === groupId)?.friendIds ?? [];
-      // Friends who hid their calendar (or are appearing away) drop out of the
-      // count entirely; the rest are counted per their shared visibility level.
-      const visibleFriendIds = groupFriendIds.filter((friendId) =>
-        isFriendVisible(visibility.get(friendId))
-      );
-      const dayStatuses = statusesByDate.get(isoDate);
-      const friendsInTown = visibleFriendIds.filter((friendId) =>
-        isFriendInTown(visibility.get(friendId), dayStatuses?.get(friendId))
-      ).length;
+      const scopedFriendIds = scopeFriendIds(allFriendIds, groupFriendIds);
 
-      return {
-        date: isoDate,
-        friendsInTown,
-        totalFriends: visibleFriendIds.length,
-      };
+      return aggregateDayDensity(
+        isoDate,
+        scopedFriendIds,
+        visibility,
+        statusesByDate.get(isoDate)
+      );
     },
     [allFriendIds, groups, statusesByDate, visibility]
   );
@@ -428,19 +438,71 @@ export default function FriendsCalendarScreen() {
             />
           </View>
         )}
-        <FriendsCalendar
-          totalFriends={friends.length}
-          groups={groups}
-          selectedGroupId={selectedGroupId}
-          onSelectGroup={setSelectedGroupId}
-          getDayData={getDayData}
-          lastUpdatedAt={lastUpdatedAt}
-          isRefreshing={isRefreshing}
-          onDayPress={(iso, groupId) => setSelectedDay({ date: iso, groupId })}
-          onAddFriendsPress={handleAddFriendsPress}
-          showEmptyStatePrompt={showAddFriendsPrompt}
-          onDismissEmptyState={dismissAddFriendsPrompt}
-        />
+        <View
+          style={[
+            styles.viewToggleWrap,
+            { marginTop: isCompact ? spacing[4] : spacing[7] },
+          ]}
+        >
+          <View
+            style={styles.viewToggle}
+            accessibilityRole="tablist"
+            accessibilityLabel="Calendar view"
+          >
+            {VIEW_MODES.map((mode) => {
+              const active = viewMode === mode.id;
+              return (
+                <Pressable
+                  key={mode.id}
+                  onPress={() => setViewMode(mode.id)}
+                  accessibilityRole="tab"
+                  accessibilityState={{ selected: active }}
+                  style={({ pressed, hovered }: any) => [
+                    styles.viewToggleOption,
+                    active && styles.viewToggleOptionActive,
+                    !active && (pressed || hovered) && styles.viewToggleOptionHover,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.viewToggleText,
+                      active && styles.viewToggleTextActive,
+                    ]}
+                  >
+                    {mode.label}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        </View>
+        {viewMode === 'month' ? (
+          <FriendsCalendar
+            totalFriends={friends.length}
+            groups={groups}
+            selectedGroupId={selectedGroupId}
+            onSelectGroup={setSelectedGroupId}
+            getDayData={getDayData}
+            lastUpdatedAt={lastUpdatedAt}
+            isRefreshing={isRefreshing}
+            onDayPress={(iso, groupId) => setSelectedDay({ date: iso, groupId })}
+            onAddFriendsPress={handleAddFriendsPress}
+            showEmptyStatePrompt={showAddFriendsPrompt}
+            onDismissEmptyState={dismissAddFriendsPrompt}
+          />
+        ) : (
+          <HeatmapCalendar
+            totalFriends={friends.length}
+            groups={groups}
+            selectedGroupId={selectedGroupId}
+            onSelectGroup={setSelectedGroupId}
+            getDayData={getDayData}
+            lastUpdatedAt={lastUpdatedAt}
+            isRefreshing={isRefreshing}
+            onDayPress={(iso, groupId) => setSelectedDay({ date: iso, groupId })}
+            onAddFriendsPress={handleAddFriendsPress}
+          />
+        )}
         {!needsAvailabilitySetup && (
           <View style={styles.inviteSection}>
             <InviteFriends />
@@ -560,6 +622,50 @@ const styles = StyleSheet.create({
   },
   onboardingButton: {
     minWidth: 180,
+  },
+  viewToggleWrap: {
+    width: '100%',
+    maxWidth: 1200,
+    alignSelf: 'center',
+    alignItems: 'center',
+    paddingHorizontal: spacing[4],
+    // Tuck the calendar (which adds its own top padding) up underneath the
+    // toggle so the control reads as calendar chrome, not a floating island.
+    marginBottom: -spacing[4],
+  },
+  viewToggle: {
+    flexDirection: 'row',
+    backgroundColor: colors.background.secondary,
+    borderRadius: radius.full,
+    borderWidth: 1,
+    borderColor: colors.border.subtle,
+    padding: 4,
+    gap: 4,
+  },
+  viewToggleOption: {
+    minHeight: 40,
+    paddingHorizontal: spacing[4],
+    paddingVertical: spacing[2],
+    borderRadius: radius.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  viewToggleOptionActive: {
+    backgroundColor: colors.background.card,
+    ...shadows.sm,
+  },
+  viewToggleOptionHover: {
+    backgroundColor: colors.background.card,
+  },
+  viewToggleText: {
+    fontFamily: fontFamilies.inter.medium,
+    fontSize: typography.label.fontSize,
+    fontWeight: '600',
+    letterSpacing: typography.label.letterSpacing,
+    color: colors.text.secondary,
+  },
+  viewToggleTextActive: {
+    color: colors.text.primary,
   },
   inviteSection: {
     paddingHorizontal: 16,
