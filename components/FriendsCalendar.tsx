@@ -30,7 +30,7 @@ import {
   typography,
 } from '../theme';
 import {
-  getHeatmapColor,
+  getHeatmapColors,
   HeatmapDayData,
 } from '../lib/heatmap';
 import Button from './Button';
@@ -113,6 +113,10 @@ export default function FriendsCalendar({
       : 'Availability not updated yet';
 
   const handleDayPress = (iso: string) => {
+    // Tapping a date opens the day-detail view for that date (PRA-24). When the
+    // viewer follows no friends there's no density to explore, so a tap is a
+    // no-op — the empty-state card owns this moment instead of a dead-end modal.
+    if (isEmpty) return;
     onDayPress?.(iso, activeGroupId);
   };
 
@@ -232,7 +236,10 @@ export default function FriendsCalendar({
                   const data = getDayData
                     ? getDayData(iso, activeGroupId)
                     : { date: iso, friendsInTown: 0, totalFriends: selectedTotalFriends };
-                  const bg = getHeatmapColor(data.friendsInTown, data.totalFriends);
+                  const { background: bg, foreground: fg } = getHeatmapColors(
+                    data.friendsInTown,
+                    data.totalFriends
+                  );
                   const dayNumber = format(date, 'd');
                   const friendCountLabel = `${data.friendsInTown} of ${data.totalFriends} friends in town`;
 
@@ -240,9 +247,12 @@ export default function FriendsCalendar({
                     <Pressable
                       key={iso}
                       onPress={() => handleDayPress(iso)}
-                      accessibilityRole="button"
+                      disabled={isEmpty}
+                      accessibilityRole={isEmpty ? undefined : 'button'}
                       accessibilityLabel={`${format(date, 'EEEE, MMM d')} - ${friendCountLabel}`}
-                      accessibilityHint="Tap to view which friends are in town"
+                      accessibilityHint={
+                        isEmpty ? undefined : 'Tap to view which friends are in town'
+                      }
                       hitSlop={layout.compact ? 0 : 4}
                       style={({ pressed, hovered }: any) => [
                         styles.cell,
@@ -263,6 +273,7 @@ export default function FriendsCalendar({
                         style={[
                           styles.dayNumber,
                           layout.compact && styles.dayNumberCompact,
+                          { color: fg },
                           !inMonth && styles.dayNumberOutsideMonth,
                         ]}
                       >
@@ -273,6 +284,7 @@ export default function FriendsCalendar({
                           style={[
                             styles.friendCount,
                             layout.compact && styles.friendCountCompact,
+                            { color: fg },
                             !inMonth && styles.friendCountOutsideMonth,
                           ]}
                           numberOfLines={1}
@@ -468,7 +480,9 @@ const styles = StyleSheet.create({
   },
   friendCount: {
     ...typography.calendar.meta,
-    color: 'rgba(255, 255, 255, 0.85)',
+    // Concrete color is set per-cell from getHeatmapColors().foreground so it
+    // stays legible on every heat tone; this is only a fallback.
+    color: colors.text.primary,
     alignSelf: 'flex-end',
   },
   friendCountCompact: {

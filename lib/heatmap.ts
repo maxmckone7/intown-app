@@ -34,22 +34,46 @@ export function isFriendInTown(
   return status !== 'out_of_town';
 }
 
+export type HeatmapCellColors = {
+  /** Cell background. */
+  background: string;
+  /** Legible text color for this cell (day number + count), >= WCAG 4.5:1. */
+  foreground: string;
+};
+
 /**
- * Returns the heatmap color token for a given day based on the
- * ratio of friends in town. Mirrors the buckets in DES-11.
+ * Returns the background + foreground colors for a day cell based on the
+ * *count* of friends in town — the literal "density of in-town friends"
+ * this view exists to show (PRA-23 / DES-11).
  *
- * If totalFriends is 0, returns the neutral background.secondary so
- * the cell is visible but recedes (the empty state owns the messaging).
+ * Density is keyed on the absolute count, not the in-town/total ratio: one
+ * friend around is low density whether you follow 1 friend or 50, so a lone
+ * friend never reads "hotter" than a day with several friends around.
+ *
+ * If totalFriends is 0 the viewer follows nobody, so we return the neutral
+ * background.secondary (with primary text) — the empty state owns the messaging
+ * and the cell recedes. A day where friends *are* followed but none are in town
+ * still gets the coolest heat tone so it reads as data, not emptiness.
  */
-export function getHeatmapColor(
+export function getHeatmapColors(
   friendsInTown: number,
   totalFriends: number
-): string {
-  if (totalFriends <= 0) return colors.background.secondary;
+): HeatmapCellColors {
+  if (totalFriends <= 0) {
+    return {
+      background: colors.background.secondary,
+      foreground: colors.text.primary,
+    };
+  }
 
-  const ratio = friendsInTown / totalFriends;
-  if (ratio >= 0.8) return colors.heatmap.high;
-  if (ratio >= 0.6) return colors.heatmap.mediumHigh;
-  if (ratio >= 0.4) return colors.heatmap.mediumLow;
-  return colors.heatmap.low;
+  if (friendsInTown >= 6) {
+    return { background: colors.heatmap.many, foreground: colors.heatmap.textLight };
+  }
+  if (friendsInTown >= 3) {
+    return { background: colors.heatmap.some, foreground: colors.heatmap.textDark };
+  }
+  if (friendsInTown >= 1) {
+    return { background: colors.heatmap.few, foreground: colors.heatmap.textDark };
+  }
+  return { background: colors.heatmap.none, foreground: colors.heatmap.textDark };
 }
