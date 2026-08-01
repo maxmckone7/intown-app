@@ -198,7 +198,9 @@ data is trusted downstream.
 
 **PRD question:** *What session expiration and refresh behavior is expected?*
 
-**Status:** Partially decided (defaults in place).
+**Status:** Partially decided (defaults in place). Behavior now defined end to
+end in `SESSION_HANDLING_SPEC.md` (PRA-14); the residual product/config decisions
+below remain open and are mirrored as that spec's §7 open questions.
 
 **Current state.** The real client (`lib/supabase.ts`) is configured with
 `autoRefreshToken: true`, `persistSession: true` (backed by `AsyncStorage`), and
