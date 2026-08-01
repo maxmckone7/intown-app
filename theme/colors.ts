@@ -1,9 +1,22 @@
 export const colors = {
+  // Sequential density scale for the friends heat map. Ordered coolest -> hottest
+  // by *count of friends in town*. The ramp is monotonic in luminance so density
+  // survives grayscale and red/green/blue color-vision deficiencies (the buckets
+  // stay rankable by lightness alone), and each `text*` token clears WCAG 4.5:1 on
+  // its paired cells. See lib/heatmap.ts for the bucket thresholds. (PRA-23 / DES-11)
   heatmap: {
-    high: '#86A789',
-    mediumHigh: '#E8C547',
-    mediumLow: '#D08C5C',
-    low: '#C45A4D',
+    none: '#EAD3A6', // 0 friends in town
+    few: '#F0B267', // 1-2
+    some: '#DC7C3F', // 3-5
+    many: '#AE3F28', // 6+
+    textDark: '#1F1B16', // foreground for none/few/some
+    textLight: '#FFF7EE', // foreground for many
+  },
+  // Semantic in-town / away colors (green = around, red = away). Used by the
+  // user's own availability calendar and positive toasts.
+  status: {
+    inTown: '#86A789',
+    outOfTown: '#C45A4D',
   },
   background: {
     primary: '#FAF7F2',

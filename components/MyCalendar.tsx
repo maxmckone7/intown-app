@@ -660,7 +660,7 @@ export default function MyCalendar() {
                   const todayCell = isSameDay(date, today);
                   const status = statusFor(iso);
                   const bg =
-                    status === 'in_town' ? colors.heatmap.high : colors.heatmap.low;
+                    status === 'in_town' ? colors.status.inTown : colors.status.outOfTown;
                   const dayNumber = format(date, 'd');
                   const fullStatusLabel = status === 'in_town' ? 'In Town' : 'Away';
                   const statusLabel =
