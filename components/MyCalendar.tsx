@@ -38,6 +38,7 @@ import { useToast } from './ToastProvider';
 import { authService } from '../services/auth';
 import { calendarService } from '../services/calendar';
 import { addFriendsPromptService } from '../services/addFriendsPrompt';
+import { track } from '../services/analytics';
 import { CalendarStatus } from '../lib/types';
 import { getCalendarLayout } from './calendarLayout';
 
@@ -218,6 +219,16 @@ export default function MyCalendar() {
 
         setSaveStateForDate(iso, 'saved');
         toast.success(statusMessage(desired));
+
+        // Reminder-effectiveness signal: a status day was refreshed. Source is
+        // 'manual_calendar' (the user's own calendar tab); reminder-driven
+        // updates are attributed by delivery→update time window in reporting.
+        track('status_updated', {
+          user_id: currentUserId,
+          date: iso,
+          status: dayStatusToCalendarStatus(desired),
+          source: 'manual_calendar',
+        });
       } catch (err: any) {
         if (!mountedRef.current) return;
 
