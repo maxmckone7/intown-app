@@ -34,6 +34,84 @@ export function isFriendInTown(
   return status !== 'out_of_town';
 }
 
+/**
+ * Resolve the set of friend ids in scope for a group selection, guarding
+ * against the two ways the inputs can be dirty:
+ *
+ *   1. Membership drift — `friend_groups.friend_ids` is a denormalized array
+ *      that can still list someone you've since removed. A stale member has no
+ *      visibility rule and no calendar entry, so downstream it would default to
+ *      "in town" and inflate the count, disagreeing with the day-detail list
+ *      (which already intersects membership with the friend set). So we
+ *      intersect the group's membership with the current accepted-friends set.
+ *      See PRA-25.
+ *   2. Duplicate ids — a doubled id in either array would otherwise be counted
+ *      twice. We collapse to a set so each friend contributes at most once.
+ *
+ * Pass `groupFriendIds` as null/undefined for the "all friends" (unscoped)
+ * selection. Note that an *empty* array is deliberately NOT the same as
+ * null: an empty group scopes to nobody, whereas null means no scoping.
+ */
+export function scopeFriendIds(
+  allFriendIds: Iterable<string>,
+  groupFriendIds?: Iterable<string> | null
+): string[] {
+  const friendSet = new Set(allFriendIds);
+  if (groupFriendIds == null) {
+    return [...friendSet];
+  }
+
+  const scoped = new Set<string>();
+  for (const friendId of groupFriendIds) {
+    if (friendSet.has(friendId)) {
+      scoped.add(friendId);
+    }
+  }
+  return [...scoped];
+}
+
+/**
+ * Compute the in-town friend density for a single date from the existing
+ * Calendar (per-date statuses) and In/Out Status (visibility) signals — the
+ * core PRA-27 aggregation. Pure and deterministic: the same inputs always
+ * produce the same `HeatmapDayData`, independent of iteration order, wall
+ * clock, or how sparse the data is.
+ *
+ * `scopedFriendIds` should already be group-resolved (see `scopeFriendIds`).
+ * `statusesForDate` is the map of friend id -> status for THIS date; it is
+ * optional because most dates have no entries at all — an empty/undefined map
+ * is the common "empty date" case, not an error. Friends hidden from the viewer
+ * drop out of both the count and the denominator; everyone else is counted per
+ * their shared visibility level.
+ */
+export function aggregateDayDensity(
+  date: string,
+  scopedFriendIds: Iterable<string>,
+  visibility: ReadonlyMap<string, VisibilityLevel>,
+  statusesForDate?: ReadonlyMap<string, CalendarStatus>
+): HeatmapDayData {
+  const counted = new Set<string>();
+  let friendsInTown = 0;
+  let totalFriends = 0;
+
+  for (const friendId of scopedFriendIds) {
+    // Defensive dedupe so a repeated id can't be counted twice, even if the
+    // caller passed a raw array rather than a scoped set.
+    if (counted.has(friendId)) continue;
+    counted.add(friendId);
+
+    const level = visibility.get(friendId);
+    if (!isFriendVisible(level)) continue;
+
+    totalFriends += 1;
+    if (isFriendInTown(level, statusesForDate?.get(friendId))) {
+      friendsInTown += 1;
+    }
+  }
+
+  return { date, friendsInTown, totalFriends };
+}
+
 export type HeatmapCellColors = {
   /** Cell background. */
   background: string;
