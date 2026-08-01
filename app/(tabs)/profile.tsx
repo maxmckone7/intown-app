@@ -25,6 +25,7 @@ import {
   getDefaultCoordinationNotificationPreferences,
 } from '../../services/coordinationNotifications';
 import { friendGroupsService } from '../../services/friendGroups';
+import { track } from '../../services/analytics';
 import { supabase } from '../../lib/supabase';
 import {
   CoordinationNotificationPreferences,
@@ -353,6 +354,16 @@ export default function ProfileScreen() {
         updates
       );
       setNotificationPreferences(saved);
+
+      // Opt-in / opt-out signal for notification success measures.
+      track('notification_preferences_changed', {
+        user_id: user.id,
+        changed: Object.keys(updates),
+        coordination_enabled: saved.coordination_enabled,
+        weekend_in_town_enabled: saved.weekend_in_town_enabled,
+        back_in_town_enabled: saved.back_in_town_enabled,
+        delivery_channels: saved.delivery_channels,
+      });
     } catch (error: any) {
       setNotificationPreferences(current);
       showAlert(

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Linking,
@@ -20,6 +20,7 @@ import { friendGroupsService } from '../../services/friendGroups';
 import { friendsService } from '../../services/friends';
 import { privacyService } from '../../services/privacy';
 import { addFriendsPromptService } from '../../services/addFriendsPrompt';
+import { track } from '../../services/analytics';
 import {
   CalendarEntry,
   CalendarStatus,
@@ -163,6 +164,25 @@ export default function FriendsCalendarScreen() {
       setSelectedGroupId(routeGroupId);
     }
   }, [routeDate, routeGroupId]);
+
+  // Notification-engagement signal. A `?date=` deep link into this screen is
+  // produced only by coordination (friend-status) notifications, so its arrival
+  // is a "notification opened" event. Guard so each distinct deep link is
+  // counted once even as `userId` resolves after mount.
+  const trackedNotificationOpenRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!userId || !routeDate || !isIsoDate(routeDate)) return;
+    const groupId = routeGroupId || 'all';
+    const key = `${routeDate}|${groupId}`;
+    if (trackedNotificationOpenRef.current === key) return;
+    trackedNotificationOpenRef.current = key;
+
+    track('friend_status_notification_opened', {
+      recipient_id: userId,
+      date: routeDate,
+      group_id: groupId,
+    });
+  }, [userId, routeDate, routeGroupId]);
 
   const loadUserAndFriends = useCallback(async () => {
     setLoading(true);
