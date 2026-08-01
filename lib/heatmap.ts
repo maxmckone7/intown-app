@@ -34,6 +34,13 @@ export function isFriendInTown(
   return status !== 'out_of_town';
 }
 
+export type HeatmapCellColors = {
+  /** Cell background. */
+  background: string;
+  /** Legible text color for this cell (day number + count), >= WCAG 4.5:1. */
+  foreground: string;
+};
+
 /**
  * Resolve the set of friend ids in scope for a group selection, guarding
  * against the two ways the inputs can be dirty:
@@ -120,6 +127,14 @@ export type HeatmapCellColors = {
 };
 
 /**
+ * Returns the background + foreground colors for a day cell based on the
+ * *count* of friends in town — the literal "density of in-town friends"
+ * this view exists to show (PRA-23 / DES-11).
+ *
+ * Density is keyed on the absolute count, not the in-town/total ratio: one
+ * friend around is low density whether you follow 1 friend or 50, so a lone
+ * friend never reads "hotter" than a day with several friends around.
+ *
  * Returns the background + foreground colors for a day cell based on the
  * *count* of friends in town — the literal "density of in-town friends"
  * this view exists to show (PRA-23 / DES-11).
