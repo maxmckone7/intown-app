@@ -164,16 +164,27 @@ CREATE TABLE IF NOT EXISTS public.coordination_notification_batches (
   body TEXT NOT NULL,
   deep_link TEXT NOT NULL,
   channels TEXT[] NOT NULL DEFAULT ARRAY['push']::TEXT[],
+  -- 'failed' added in PRA-2: the delivery worker attempted every requested
+  -- channel and none succeeded (distinct from 'suppressed' = intentionally
+  -- not sent).
   status TEXT NOT NULL DEFAULT 'queued' CHECK (
-    status IN ('queued', 'sent', 'suppressed')
+    status IN ('queued', 'sent', 'suppressed', 'failed')
   ),
   send_after TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
   sent_at TIMESTAMP WITH TIME ZONE,
+  -- Delivery observability (PRA-2): attempt count and the last terminal failure.
+  attempts INTEGER NOT NULL DEFAULT 0,
+  failed_at TIMESTAMP WITH TIME ZONE,
+  failure_reason TEXT,
   batch_key TEXT NOT NULL UNIQUE,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   CONSTRAINT coordination_notification_batches_channels_check
-    CHECK (channels <@ ARRAY['push', 'email']::TEXT[])
+    CHECK (channels <@ ARRAY['push', 'email']::TEXT[]),
+  CONSTRAINT coordination_notification_batches_failure_reason_check
+    CHECK (failure_reason IS NULL OR failure_reason IN (
+      'channel_not_configured', 'no_delivery_address', 'provider_error', 'invalid_message'
+    ))
 );
 
 ALTER TABLE public.coordination_notification_batches
@@ -190,6 +201,9 @@ ALTER TABLE public.coordination_notification_batches
   ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'queued',
   ADD COLUMN IF NOT EXISTS send_after TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
   ADD COLUMN IF NOT EXISTS sent_at TIMESTAMP WITH TIME ZONE,
+  ADD COLUMN IF NOT EXISTS attempts INTEGER NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS failed_at TIMESTAMP WITH TIME ZONE,
+  ADD COLUMN IF NOT EXISTS failure_reason TEXT,
   ADD COLUMN IF NOT EXISTS batch_key TEXT,
   ADD COLUMN IF NOT EXISTS created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW();
@@ -206,15 +220,12 @@ BEGIN
       CHECK (notification_type IN ('weekend_in_town', 'back_in_town'));
   END IF;
 
-  IF NOT EXISTS (
-    SELECT 1
-    FROM pg_constraint
-    WHERE conname = 'coordination_notification_batches_status_check'
-  ) THEN
-    ALTER TABLE public.coordination_notification_batches
-      ADD CONSTRAINT coordination_notification_batches_status_check
-      CHECK (status IN ('queued', 'sent', 'suppressed'));
-  END IF;
+  -- Re-create so existing databases pick up the 'failed' status (PRA-2).
+  ALTER TABLE public.coordination_notification_batches
+    DROP CONSTRAINT IF EXISTS coordination_notification_batches_status_check;
+  ALTER TABLE public.coordination_notification_batches
+    ADD CONSTRAINT coordination_notification_batches_status_check
+    CHECK (status IN ('queued', 'sent', 'suppressed', 'failed'));
 
   IF NOT EXISTS (
     SELECT 1
@@ -225,7 +236,53 @@ BEGIN
       ADD CONSTRAINT coordination_notification_batches_channels_check
       CHECK (channels <@ ARRAY['push', 'email']::TEXT[]);
   END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint
+    WHERE conname = 'coordination_notification_batches_failure_reason_check'
+  ) THEN
+    ALTER TABLE public.coordination_notification_batches
+      ADD CONSTRAINT coordination_notification_batches_failure_reason_check
+      CHECK (failure_reason IS NULL OR failure_reason IN (
+        'channel_not_configured', 'no_delivery_address', 'provider_error', 'invalid_message'
+      ));
+  END IF;
 END $$;
+
+-- Status-freshness reminders (PRA-2). Unlike coordination batches (triggered by
+-- a friend's status change), a reminder nudges the recipient to refresh their
+-- OWN status. Rows are queued from the reminder rules (services/reminderRules.ts)
+-- and dispatched across `channels` by the delivery worker
+-- (services/reminderDelivery.ts). `dedupe_key` makes per-period queuing
+-- idempotent so a scheduler that runs twice in a window cannot double-send.
+CREATE TABLE IF NOT EXISTS public.reminders (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+  reminder_type TEXT NOT NULL CHECK (reminder_type IN ('weekly', 'pre_weekend')),
+  channels TEXT[] NOT NULL DEFAULT ARRAY['push']::TEXT[],
+  title TEXT NOT NULL,
+  body TEXT NOT NULL,
+  deep_link TEXT NOT NULL,
+  scheduled_for TIMESTAMP WITH TIME ZONE NOT NULL,
+  status TEXT NOT NULL DEFAULT 'queued' CHECK (
+    status IN ('queued', 'sent', 'suppressed', 'failed')
+  ),
+  send_after TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+  sent_at TIMESTAMP WITH TIME ZONE,
+  attempts INTEGER NOT NULL DEFAULT 0,
+  failed_at TIMESTAMP WITH TIME ZONE,
+  failure_reason TEXT,
+  dedupe_key TEXT NOT NULL UNIQUE,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  CONSTRAINT reminders_channels_check
+    CHECK (channels <@ ARRAY['push', 'email']::TEXT[]),
+  CONSTRAINT reminders_failure_reason_check
+    CHECK (failure_reason IS NULL OR failure_reason IN (
+      'channel_not_configured', 'no_delivery_address', 'provider_error', 'invalid_message'
+    ))
+);
 
 -- Create indexes for performance
 CREATE INDEX IF NOT EXISTS idx_users_email_lower ON public.users (lower(email));
@@ -252,6 +309,10 @@ CREATE INDEX IF NOT EXISTS idx_coordination_batches_recipient_status
   ON public.coordination_notification_batches(recipient_id, status, send_after);
 CREATE INDEX IF NOT EXISTS idx_coordination_batches_status_send_after
   ON public.coordination_notification_batches(status, send_after);
+-- Supports the reminder delivery worker's claim query (PRA-2): due, queued rows.
+CREATE INDEX IF NOT EXISTS idx_reminders_status_send_after
+  ON public.reminders(status, send_after);
+CREATE INDEX IF NOT EXISTS idx_reminders_user_id ON public.reminders(user_id);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_coordination_batches_batch_key
   ON public.coordination_notification_batches(batch_key);
 
@@ -263,6 +324,7 @@ ALTER TABLE public.friend_groups ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.invites ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.notification_preferences ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.coordination_notification_batches ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.reminders ENABLE ROW LEVEL SECURITY;
 
 -- RLS Policies for users table
 -- Users can read their own profile and profiles of their friends
@@ -411,6 +473,13 @@ CREATE POLICY "Users can delete own notification preferences" ON public.notifica
 DROP POLICY IF EXISTS "Users can view own coordination notification batches" ON public.coordination_notification_batches;
 CREATE POLICY "Users can view own coordination notification batches" ON public.coordination_notification_batches
   FOR SELECT USING (recipient_id = auth.uid());
+
+-- RLS Policies for reminders. Users may read their own reminders (e.g. a future
+-- in-app reminders view); queuing and delivery run server-side under the
+-- service role, which bypasses RLS. No client insert/update policy is granted.
+DROP POLICY IF EXISTS "Users can view own reminders" ON public.reminders;
+CREATE POLICY "Users can view own reminders" ON public.reminders
+  FOR SELECT USING (user_id = auth.uid());
 
 -- Function to automatically create user profile on signup
 CREATE OR REPLACE FUNCTION public.handle_new_user()
@@ -732,5 +801,10 @@ CREATE TRIGGER update_notification_preferences_updated_at
 DROP TRIGGER IF EXISTS update_coordination_notification_batches_updated_at ON public.coordination_notification_batches;
 CREATE TRIGGER update_coordination_notification_batches_updated_at
   BEFORE UPDATE ON public.coordination_notification_batches
+  FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+
+DROP TRIGGER IF EXISTS update_reminders_updated_at ON public.reminders;
+CREATE TRIGGER update_reminders_updated_at
+  BEFORE UPDATE ON public.reminders
   FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
 

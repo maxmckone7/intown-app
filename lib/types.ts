@@ -92,7 +92,31 @@ export type CoordinationNotificationType =
 export type CoordinationNotificationStatus =
   | 'queued'
   | 'sent'
-  | 'suppressed';
+  | 'suppressed'
+  // The delivery worker (PRA-2) attempted every requested channel and none
+  // succeeded. Distinct from 'suppressed' (intentionally not sent).
+  | 'failed';
+
+/**
+ * Why a delivery attempt for a channel did not succeed. Shared by reminders and
+ * coordination notifications so failure detection (PRA-2 AC) is uniform across
+ * both delivery paths.
+ *
+ *   channel_not_configured - no transport wired for the channel (the default
+ *                            state until a push/email vendor is chosen; see
+ *                            docs/reminder-delivery.md open questions).
+ *   no_delivery_address    - recipient has no usable address for the channel
+ *                            (no push token registered, no email on file).
+ *   provider_error         - the transport ran but the provider rejected or
+ *                            errored (network, 4xx/5xx, timeout).
+ *   invalid_message        - the message failed validation before sending
+ *                            (empty body, missing recipient, …).
+ */
+export type DeliveryFailureReason =
+  | 'channel_not_configured'
+  | 'no_delivery_address'
+  | 'provider_error'
+  | 'invalid_message';
 
 /**
  * Status-freshness reminders that nudge a user to keep their OWN in/out status
@@ -151,7 +175,56 @@ export interface CoordinationNotificationBatch {
   status: CoordinationNotificationStatus;
   send_after: string;
   sent_at: string | null;
+  /** Number of delivery attempts made by the worker (PRA-2). */
+  attempts: number;
+  /** When the batch was last marked `failed`. Null unless status is 'failed'. */
+  failed_at: string | null;
+  /** Reason for the most recent failed attempt, for observability/alerting. */
+  failure_reason: DeliveryFailureReason | null;
   batch_key: string;
+  created_at: string;
+  updated_at: string;
+}
+
+/** Status-freshness reminder kinds — prompts to keep your own status current. */
+export type ReminderType = 'weekly' | 'pre_weekend';
+
+export type ReminderStatus =
+  | 'queued'
+  | 'sent'
+  | 'suppressed'
+  | 'failed';
+
+/**
+ * A status-freshness reminder (PRA-2 · Reminders & Notifications). Unlike a
+ * coordination notification — which is triggered by a *friend's* status change —
+ * a reminder nudges the recipient to refresh *their own* in/out status. Rows are
+ * queued from the reminder rules (services/reminderRules.ts) and dispatched
+ * across `channels` by the delivery worker (services/reminderDelivery.ts).
+ *
+ * `dedupe_key` makes queuing idempotent for a given (user, type, period) so a
+ * scheduler that runs more than once in a window cannot double-send.
+ */
+export interface Reminder {
+  id: string;
+  user_id: string;
+  reminder_type: ReminderType;
+  channels: NotificationChannel[];
+  title: string;
+  body: string;
+  /** Deep link into the user's own calendar for the period being nudged. */
+  deep_link: string;
+  /** ISO timestamp the reminder is intended to fire at. */
+  scheduled_for: string;
+  status: ReminderStatus;
+  /** Earliest time the worker may attempt delivery (usually == scheduled_for). */
+  send_after: string;
+  sent_at: string | null;
+  attempts: number;
+  failed_at: string | null;
+  failure_reason: DeliveryFailureReason | null;
+  /** Idempotency key: `${user_id}:${reminder_type}:${period}`. */
+  dedupe_key: string;
   created_at: string;
   updated_at: string;
 }
