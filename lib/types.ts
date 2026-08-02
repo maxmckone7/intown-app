@@ -1,10 +1,31 @@
 export type CalendarStatus = 'in_town' | 'out_of_town';
 
+/**
+ * Who last wrote a calendar day's status. This is the source-of-truth marker
+ * for the Google Calendar Sync integration (PRA-10): a `manual` day is one the
+ * user set themselves and is authoritative — calendar inference must never
+ * overwrite it. A `calendar_inferred` day was written by the sync integration
+ * and may be updated or cleaned up by a later sync.
+ */
+export type StatusSource = 'manual' | 'calendar_inferred';
+
 export interface CalendarEntry {
   id: string;
   user_id: string;
   date: string; // ISO date string (YYYY-MM-DD)
   status: CalendarStatus;
+  /**
+   * Who last wrote this entry. Defaults to `manual` for rows created before the
+   * sync integration existed (see database/schema.sql migration).
+   */
+  source: StatusSource;
+  /**
+   * For `calendar_inferred` entries only: the ISO timestamp of the calendar
+   * snapshot the inference was computed from. Used to reject stale/out-of-order
+   * sync runs (never move an entry backwards to an older snapshot). Null for
+   * manual entries.
+   */
+  inferred_synced_at: string | null;
   created_at: string;
   updated_at: string;
 }

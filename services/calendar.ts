@@ -1,5 +1,18 @@
 import { supabase } from '../lib/supabase';
-import { CalendarEntry, CalendarStatus } from '../lib/types';
+import { CalendarEntry, CalendarStatus, StatusSource } from '../lib/types';
+
+/**
+ * Provenance for a status write. Omitting it (or passing nothing) records a
+ * `manual` entry — the historical behavior — so every existing call site keeps
+ * writing user-authoritative days. The Google Calendar Sync integration
+ * (services/calendarStatusSync.ts) passes `source: 'calendar_inferred'` with the
+ * snapshot timestamp it inferred from.
+ */
+export interface SetEntryOptions {
+  source?: StatusSource;
+  /** ISO timestamp of the calendar snapshot, for `calendar_inferred` writes. */
+  inferredSyncedAt?: string | null;
+}
 
 export const calendarService = {
   async getEntries(userId: string, startDate?: string, endDate?: string): Promise<CalendarEntry[]> {
@@ -22,7 +35,19 @@ export const calendarService = {
     return data || [];
   },
 
-  async setEntry(userId: string, date: string, status: CalendarStatus): Promise<CalendarEntry> {
+  async setEntry(
+    userId: string,
+    date: string,
+    status: CalendarStatus,
+    options: SetEntryOptions = {}
+  ): Promise<CalendarEntry> {
+    // Default to a manual, user-authoritative write. A manual write also clears
+    // any inference provenance, so re-tapping a previously auto-set day hands
+    // ownership of it back to the user (see calendarStatusSync source-of-truth).
+    const source: StatusSource = options.source ?? 'manual';
+    const inferredSyncedAt =
+      source === 'calendar_inferred' ? options.inferredSyncedAt ?? null : null;
+
     // Check if entry exists
     const { data: existing } = await supabase
       .from('calendar_entries')
@@ -42,6 +67,8 @@ export const calendarService = {
             user_id: userId,
             date,
             status,
+            source,
+            inferred_synced_at: inferredSyncedAt,
             updated_at: new Date().toISOString(),
           },
           { onConflict: 'id' }
@@ -59,6 +86,8 @@ export const calendarService = {
           user_id: userId,
           date,
           status,
+          source,
+          inferred_synced_at: inferredSyncedAt,
         })
         .select()
         .single();

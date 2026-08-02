@@ -32,7 +32,8 @@ export type StatusUpdateSource =
   | 'manual_calendar' // user tapped a day in their calendar, unprompted
   | 'onboarding' // first-run "set this week" availability flow
   | 'reminder' // opened directly from a status-freshness reminder
-  | 'notification'; // opened from a friend-status coordination notification
+  | 'notification' // opened from a friend-status coordination notification
+  | 'calendar_sync'; // auto-applied by Google Calendar Sync (PRA-10), no user action
 
 /** Status-freshness reminders that nudge a user to refresh their own status. */
 export type ReminderType = 'weekly' | 'pre_weekend';
