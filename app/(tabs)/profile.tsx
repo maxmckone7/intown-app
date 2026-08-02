@@ -38,6 +38,7 @@ import Button from '../../components/Button';
 import StateFeedback from '../../components/StateFeedback';
 import { ProfileHeroSkeleton } from '../../components/Skeleton';
 import PrivacyModal from '../../components/PrivacyModal';
+import CalendarConnectionCard from '../../components/CalendarConnectionCard';
 import { useToast } from '../../components/ToastProvider';
 import {
   colors,
@@ -1037,6 +1038,8 @@ export default function ProfileScreen() {
             </View>
           </View>
         </View>
+
+        <CalendarConnectionCard userId={user.id} />
 
         <View style={styles.sectionCard}>
           <View style={styles.sectionHeader}>
