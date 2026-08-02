@@ -138,6 +138,10 @@ export type AnalyticsEventMap = {
     weekend_in_town_enabled: boolean;
     back_in_town_enabled: boolean;
     delivery_channels: DeliveryChannel[];
+    // Reminder controls (PRA-3) — opt-in/opt-out of status-freshness reminders.
+    reminders_enabled: boolean;
+    weekly_reminder_enabled: boolean;
+    pre_weekend_reminder_enabled: boolean;
   };
 };
 

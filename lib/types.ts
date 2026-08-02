@@ -94,6 +94,31 @@ export type CoordinationNotificationStatus =
   | 'sent'
   | 'suppressed';
 
+/**
+ * Status-freshness reminders that nudge a user to keep their OWN in/out status
+ * current — distinct from friend-status ("coordination") notifications, which
+ * are about other people. Mirrors `ReminderType` in services/analytics.ts.
+ *   weekly      - a recurring nudge to refresh the coming week
+ *   pre_weekend - a Thu/Fri nudge to confirm weekend availability
+ */
+export type ReminderType = 'weekly' | 'pre_weekend';
+
+/**
+ * A user's row in `notification_preferences` — the single source of truth for
+ * every notification opt-in/opt-out. Despite the name it covers BOTH families:
+ *
+ *   - friend-status ("coordination") notifications: `coordination_enabled`
+ *     (master) plus the per-type `weekend_in_town_enabled` /
+ *     `back_in_town_enabled`, `delivery_channels`, and `group_id` scope. These
+ *     are respected today by the `enqueue_coordination_notifications` trigger
+ *     (database/schema.sql).
+ *   - status-freshness reminders (PRA-3): `reminders_enabled` (master) plus the
+ *     per-type `weekly_reminder_enabled` / `pre_weekend_reminder_enabled`. The
+ *     reminder scheduler/delivery worker is not built yet (see the PRD and
+ *     docs/notification-preferences.md); these controls define the contract it
+ *     must honour. Gate any reminder send through `isReminderEnabled()` in
+ *     services/coordinationNotifications.ts so there is one place that decides.
+ */
 export interface CoordinationNotificationPreferences {
   user_id: string;
   coordination_enabled: boolean;
@@ -101,6 +126,12 @@ export interface CoordinationNotificationPreferences {
   back_in_town_enabled: boolean;
   delivery_channels: NotificationChannel[];
   group_id: string | null;
+  /** Master switch for status-freshness reminders (PRA-3). */
+  reminders_enabled: boolean;
+  /** Per-type toggle: recurring weekly "refresh your status" nudge. */
+  weekly_reminder_enabled: boolean;
+  /** Per-type toggle: pre-weekend "confirm your weekend" nudge. */
+  pre_weekend_reminder_enabled: boolean;
   created_at: string;
   updated_at: string;
 }

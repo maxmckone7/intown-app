@@ -106,6 +106,15 @@ CREATE TABLE IF NOT EXISTS public.notification_preferences (
   back_in_town_enabled BOOLEAN NOT NULL DEFAULT TRUE,
   delivery_channels TEXT[] NOT NULL DEFAULT ARRAY['push']::TEXT[],
   group_id UUID REFERENCES public.friend_groups(id) ON DELETE SET NULL,
+  -- Status-freshness reminder controls (PRA-3). Reminders nudge a user to keep
+  -- their OWN status current; they default ON (opt-out) because keeping status
+  -- fresh is the reminder feature's whole purpose. The reminder scheduler is
+  -- not built yet — these columns define the opt-out contract it must honour.
+  -- (opt-in vs opt-out default is a flagged open question; see
+  -- docs/notification-preferences.md.)
+  reminders_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+  weekly_reminder_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+  pre_weekend_reminder_enabled BOOLEAN NOT NULL DEFAULT TRUE,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   CONSTRAINT notification_preferences_delivery_channels_check
@@ -118,6 +127,11 @@ ALTER TABLE public.notification_preferences
   ADD COLUMN IF NOT EXISTS back_in_town_enabled BOOLEAN NOT NULL DEFAULT TRUE,
   ADD COLUMN IF NOT EXISTS delivery_channels TEXT[] NOT NULL DEFAULT ARRAY['push']::TEXT[],
   ADD COLUMN IF NOT EXISTS group_id UUID REFERENCES public.friend_groups(id) ON DELETE SET NULL,
+  -- Backfill reminder controls on databases created before PRA-3. Existing rows
+  -- inherit the opt-out default (reminders on) to match new rows.
+  ADD COLUMN IF NOT EXISTS reminders_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+  ADD COLUMN IF NOT EXISTS weekly_reminder_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+  ADD COLUMN IF NOT EXISTS pre_weekend_reminder_enabled BOOLEAN NOT NULL DEFAULT TRUE,
   ADD COLUMN IF NOT EXISTS created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW();
 
