@@ -53,10 +53,24 @@ CREATE TABLE IF NOT EXISTS public.calendar_entries (
   user_id UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
   date DATE NOT NULL,
   status TEXT NOT NULL CHECK (status IN ('in_town', 'out_of_town')),
+  -- Source-of-truth marker for Google Calendar Sync (PRA-10). 'manual' entries
+  -- are user-authored and authoritative; 'calendar_inferred' entries were
+  -- written by the sync integration and may be updated/cleaned up by a later
+  -- sync. Existing rows and the manual toggle path default to 'manual'.
+  source TEXT NOT NULL DEFAULT 'manual' CHECK (source IN ('manual', 'calendar_inferred')),
+  -- For 'calendar_inferred' rows: timestamp of the calendar snapshot the
+  -- inference came from. Guards against stale/out-of-order sync writes.
+  inferred_synced_at TIMESTAMP WITH TIME ZONE,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   UNIQUE(user_id, date)
 );
+
+-- Backfill columns on databases created before the sync integration (PRA-10).
+ALTER TABLE public.calendar_entries
+  ADD COLUMN IF NOT EXISTS source TEXT NOT NULL DEFAULT 'manual'
+    CHECK (source IN ('manual', 'calendar_inferred')),
+  ADD COLUMN IF NOT EXISTS inferred_synced_at TIMESTAMP WITH TIME ZONE;
 
 -- Friend groups table
 CREATE TABLE IF NOT EXISTS public.friend_groups (
@@ -208,6 +222,11 @@ CREATE INDEX IF NOT EXISTS idx_friendships_status ON public.friendships(status);
 CREATE INDEX IF NOT EXISTS idx_calendar_entries_user_id ON public.calendar_entries(user_id);
 CREATE INDEX IF NOT EXISTS idx_calendar_entries_date ON public.calendar_entries(date);
 CREATE INDEX IF NOT EXISTS idx_calendar_entries_user_date ON public.calendar_entries(user_id, date);
+-- Supports the sync reconciliation scan (PRA-10): a user's calendar-inferred
+-- entries within a date window, so cleanup of stale auto-updates is cheap.
+CREATE INDEX IF NOT EXISTS idx_calendar_entries_inferred
+  ON public.calendar_entries(user_id, date)
+  WHERE source = 'calendar_inferred';
 CREATE INDEX IF NOT EXISTS idx_friend_groups_user_id ON public.friend_groups(user_id);
 CREATE INDEX IF NOT EXISTS idx_friend_groups_friend_ids ON public.friend_groups USING GIN(friend_ids);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_invites_token ON public.invites(token);
