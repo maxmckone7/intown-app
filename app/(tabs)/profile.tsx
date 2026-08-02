@@ -363,6 +363,9 @@ export default function ProfileScreen() {
         weekend_in_town_enabled: saved.weekend_in_town_enabled,
         back_in_town_enabled: saved.back_in_town_enabled,
         delivery_channels: saved.delivery_channels,
+        reminders_enabled: saved.reminders_enabled,
+        weekly_reminder_enabled: saved.weekly_reminder_enabled,
+        pre_weekend_reminder_enabled: saved.pre_weekend_reminder_enabled,
       });
     } catch (error: any) {
       setNotificationPreferences(current);
@@ -517,6 +520,7 @@ export default function ProfileScreen() {
   const preferences = getNotificationPreferences();
   const coordinationNotificationsEnabled =
     preferences?.coordination_enabled ?? false;
+  const remindersEnabled = preferences?.reminders_enabled ?? false;
 
   return (
     <>
@@ -903,6 +907,82 @@ export default function ProfileScreen() {
                     </Pressable>
                   );
                 })}
+              </View>
+            </View>
+          </View>
+        )}
+
+        {preferences && (
+          <View style={styles.sectionCard}>
+            <View style={styles.sectionHeader}>
+              <View style={styles.sectionHeaderCopy}>
+                <Text style={styles.sectionTitle}>Status Reminders</Text>
+                <Text style={styles.sectionSubtitle}>
+                  Nudges to keep your own in/out status current so friends see
+                  accurate availability.
+                </Text>
+              </View>
+              {savingNotificationPreferences && (
+                <ActivityIndicator color={colors.brand.primary} />
+              )}
+            </View>
+
+            <View style={styles.notificationList}>
+              <View style={styles.notificationRow}>
+                <View style={styles.notificationCopy}>
+                  <Text style={styles.notificationTitle}>Enable reminders</Text>
+                  <Text style={styles.notificationDescription}>
+                    Remind me to refresh my status when it may be out of date.
+                  </Text>
+                </View>
+                <Switch
+                  value={remindersEnabled}
+                  onValueChange={(value) =>
+                    void handleNotificationPreferenceChange({
+                      reminders_enabled: value,
+                    })
+                  }
+                  disabled={savingNotificationPreferences}
+                />
+              </View>
+
+              <View style={styles.notificationDivider} />
+
+              <Text style={styles.notificationGroupLabel}>Remind me</Text>
+              <View style={styles.notificationRow}>
+                <View style={styles.notificationCopy}>
+                  <Text style={styles.notificationTitle}>Weekly</Text>
+                  <Text style={styles.notificationDescription}>
+                    A once-a-week nudge to refresh the week ahead.
+                  </Text>
+                </View>
+                <Switch
+                  value={preferences.weekly_reminder_enabled}
+                  onValueChange={(value) =>
+                    void handleNotificationPreferenceChange({
+                      weekly_reminder_enabled: value,
+                    })
+                  }
+                  disabled={!remindersEnabled || savingNotificationPreferences}
+                />
+              </View>
+
+              <View style={styles.notificationRow}>
+                <View style={styles.notificationCopy}>
+                  <Text style={styles.notificationTitle}>Before the weekend</Text>
+                  <Text style={styles.notificationDescription}>
+                    A Thursday/Friday nudge to confirm your weekend availability.
+                  </Text>
+                </View>
+                <Switch
+                  value={preferences.pre_weekend_reminder_enabled}
+                  onValueChange={(value) =>
+                    void handleNotificationPreferenceChange({
+                      pre_weekend_reminder_enabled: value,
+                    })
+                  }
+                  disabled={!remindersEnabled || savingNotificationPreferences}
+                />
               </View>
             </View>
           </View>
